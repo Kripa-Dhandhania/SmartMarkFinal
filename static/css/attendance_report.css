@@ -1,0 +1,90 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f4f4;
+    padding: 20px;
+}
+
+h2 {
+    color: #333;
+}
+
+.controls-container {
+    background: white;
+    padding: 15px;
+    border-radius: 5px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    margin-bottom: 20px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.controls-container label {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.controls-container select, .controls-container input, .controls-container button {
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.controls-container button {
+    background-color: #217346; /* Excel Green */
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    border: none;
+}
+
+.controls-container button:hover {
+    background-color: #1e6b41;
+}
+
+.table-container {
+    overflow-x: auto;
+    background: white;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+table.excel-sheet {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Calibri', 'Arial', sans-serif;
+    font-size: 14px;
+}
+
+table.excel-sheet th, table.excel-sheet td {
+    border: 1px solid #d4d4d4;
+    padding: 8px;
+    text-align: left;
+}
+
+table.excel-sheet th {
+    background-color: #f3f3f3;
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 2px solid #ccc;
+}
+
+table.excel-sheet td {
+    background-color: white;
+}
+
+table.excel-sheet tr:hover td {
+    background-color: #e6f7ff;
+}
+
+/* Status Colors */
+.status-present {
+    color: #217346;
+    font-weight: bold;
+    text-align: center !important;
+}
+
+.status-absent {
+    color: #d9534f;
+    font-weight: bold;
+    text-align: center !important;
+}

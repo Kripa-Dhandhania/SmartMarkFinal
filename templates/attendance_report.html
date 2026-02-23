@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Attendance Report</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/attendance_report.css') }}">
+</head>
+
+<body>
+
+    <h2>Attendance Report</h2>
+
+
+    <div class="controls-container">
+        <form method="GET" action="{{ url_for('attendance_report') }}">
+            <label for="date">Date:</label>
+            <input type="date" id="date" name="date" value="{{ selected_date }}">
+
+            <label for="filter">Filter:</label>
+            <select id="filter" name="filter">
+                <option value="all" {% if selected_filter=='all' %}selected{% endif %}>All Slots</option>
+                {% for slot in time_slots %}
+                <option value="{{ slot }}" {% if selected_filter==slot %}selected{% endif %}>{{ slot }}</option>
+                {% endfor %}
+                <option value="skipped_rest" {% if selected_filter=='skipped_rest' %}selected{% endif %}>Skipped Morning
+                    Class (7:30-9:00)</option>
+            </select>
+
+            <button type="submit">Apply</button>
+            <button type="button" onclick="downloadReport()"
+                style="background-color: #007bff; margin-left: 10px;">Download Excel</button>
+        </form>
+    </div>
+
+    <script>
+        function downloadReport() {
+            const date = document.getElementById('date').value;
+            const filter = document.getElementById('filter').value;
+            window.location.href = `{{ url_for('download_report') }}?date=${date}&filter=${filter}`;
+        }
+    </script>
+
+    <div class="table-container">
+        <table id="attendanceTable" class="excel-sheet">
+            <thead>
+                <tr>
+                    <th>Student ID</th>
+                    <th>Name</th>
+                    {% for slot in visible_slots %}
+                    <th>{{ slot }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for student in students %}
+                <tr>
+                    <td>{{ student.id }}</td>
+                    <td>{{ student.name }}</td>
+                    {% for slot in visible_slots %}
+                    <td class="status-{{ student.attendance[slot]|lower }}">{{ student.attendance[slot] }}</td>
+                    {% endfor %}
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="{{ visible_slots|length + 2 }}" style="text-align: center;">No data found matching
+                        criteria.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+
+    <script src="{{ url_for('static', filename='js/attendance_report.js') }}"></script>
+</body>
+
+</html>

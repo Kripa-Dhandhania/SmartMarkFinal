@@ -1,18 +1,376 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-    <title>Student Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartMark | Student Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/student_dashboard.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
 </head>
+
 <body>
+    <div class="sd-wrapper">
 
-<h2>Student Dashboard</h2>
+        <!-- ── SIDEBAR ── -->
+        <aside class="sd-sidebar">
+            <div class="sd-sidebar-header">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" class="sd-sidebar-logo" alt="SmartMark">
+                <span class="sd-sidebar-brand">SmartMark</span>
+            </div>
+            <nav class="sd-nav">
+                <a href="{{ url_for('student_dashboard') }}" class="sd-nav-item active">
+                    <i class="fas fa-home"></i><span>Dashboard</span>
+                </a>
+                <a href="{{ url_for('student_my_attendance') }}" class="sd-nav-item">
+                    <i class="fas fa-history"></i><span>My Attendance</span>
+                </a>
+                <a href="{{ url_for('enroll_face') }}" class="sd-nav-item">
+                    <i class="fas fa-camera"></i><span>Face Enroll</span>
+                </a>
+                <a href="{{ url_for('teacher_dashboard') }}" class="sd-nav-item">
+                    <i class="fas fa-chalkboard-teacher"></i><span>Teacher Portal</span>
+                </a>
+            </nav>
+            <div class="sd-nav-footer">
+                <a href="{{ url_for('student_logout') }}" class="sd-logout-link">
+                    <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+                </a>
+            </div>
+        </aside>
 
-<div class="card">
-    <p><strong>Name:</strong> Alice</p>
-    <p><strong>ID:</strong> S101</p>
-    <p><strong>Attendance %:</strong> 85%</p>
-</div>
+        <!-- ── MAIN ── -->
+        <div class="sd-main">
 
+            <!-- TOP BAR -->
+            <header class="sd-topbar">
+                <div class="sd-topbar-title">
+                    <h1>Smart Attendance System &nbsp;|&nbsp; <span style="font-weight:400;opacity:0.9;">Student
+                            Dashboard</span></h1>
+                    <span>Welcome back, mark your attendance below</span>
+                </div>
+                <div class="sd-topbar-right">
+                    <button class="header-btn" id="theme-toggle" title="Toggle Dark Mode"
+                        style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;margin-right:10px;">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="sd-user-badge">
+                        <i class="fas fa-user-circle"></i> {{ student_id }}
+                    </div>
+                </div>
+            </header>
+
+            <!-- CONTENT -->
+            <div class="sd-content-area">
+
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="sd-alerts">
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <i
+                            class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'error' %}exclamation-circle{% elif category == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                <div class="sd-grid">
+
+                    <!-- LEFT COLUMN -->
+                    <div class="sd-left">
+
+                        <!-- Face Enrollment Banner -->
+                        <div class="sd-card face-card {% if face_enrolled %}enrolled{% else %}not-enrolled{% endif %}">
+                            <div class="face-card-info">
+                                <div class="face-icon">
+                                    <i
+                                        class="fas {% if face_enrolled %}fa-check-circle{% else %}fa-exclamation-circle{% endif %}"></i>
+                                </div>
+                                <div>
+                                    <strong>{% if face_enrolled %}Face Enrolled{% else %}Face Not Enrolled{% endif
+                                        %}</strong>
+                                    <p>{% if face_enrolled %}Your face is registered for recognition{% else %}Please
+                                        enroll your face to mark attendance{% endif %}</p>
+                                </div>
+                            </div>
+                            <form method="POST" action="{{ url_for('enroll_face') }}" style="margin:0;">
+                                <button type="submit" class="btn-enroll">
+                                    <i class="fas fa-camera"></i>
+                                    {% if face_enrolled %}Re-enroll Face{% else %}Enroll My Face{% endif %}
+                                </button>
+                            </form>
+                        </div>
+
+                        <!-- Active Sessions -->
+                        <div class="sd-card">
+                            <div class="sd-card-header">
+                                <h2><i class="fas fa-broadcast-tower" style="color:#22c55e;"></i> Active Sessions</h2>
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <div id="distance-meter" class="hidden"
+                                        style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; padding:4px 12px; border-radius:20px; background:#f3f4f6; color:#374151; border:1px solid #e5e7eb;">
+                                        <i class="fas fa-map-marker-alt"></i>
+                                        <span id="distance-val">Locating...</span>
+                                    </div>
+                                    {% if sessions %}
+                                    <span class="session-count">{{ sessions|length }} live</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+
+                            {% if sessions %}
+                            <div class="sessions-list">
+                                {% for s in sessions %}
+                                <div class="session-item {% if s.already_marked %}marked{% endif %}"
+                                    data-lat="{{ s.latitude or 0 }}" data-lon="{{ s.longitude or 0 }}">
+                                    <div class="session-item-info">
+                                        <div class="session-subject">{{ s.subject }}</div>
+                                        <div class="session-meta">
+                                            <i class="fas fa-clock"></i> Hour {{ s.hour }}
+                                            &nbsp;&middot;&nbsp;
+                                            <i class="fas fa-calendar-day"></i> {{ s.date }}
+                                        </div>
+                                    </div>
+                                    {% if s.already_marked %}
+                                    <button class="btn-marked" disabled><i class="fas fa-check"></i> Marked</button>
+                                    {% else %}
+                                    <form method="POST" action="{{ url_for('mark_attendance_route', session_id=s.id) }}"
+                                        style="margin:0;" class="attendance-form">
+                                        <input type="hidden" name="latitude" class="lat-input">
+                                        <input type="hidden" name="longitude" class="lon-input">
+                                        <button type="submit" class="btn-mark-att">
+                                            <i class="fas fa-fingerprint"></i> Mark Attendance
+                                        </button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <div class="empty-sessions">
+                                <i class="fas fa-satellite-dish"></i>
+                                <p>No active sessions right now</p>
+                                <small>Wait for your teacher to enable attendance</small>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                        <!-- How It Works -->
+                        <div class="sd-card how-it-works">
+                            <div class="sd-section-title">How It Works</div>
+                            <ul>
+                                <li><i class="fas fa-camera"></i> Enroll your face once <strong style="color:#111;">—
+                                        one-time setup</strong></li>
+                                <li><i class="fas fa-bolt"></i> Teacher enables a session for your class</li>
+                                <li><i class="fas fa-fingerprint"></i> Click <strong style="color:#111;">Mark
+                                        Attendance</strong> above</li>
+                                <li><i class="fas fa-check-circle" style="color:#22c55e;"></i> Face match → attendance
+                                    recorded instantly</li>
+                                <li><i class="fas fa-key" style="color:#d97706;"></i> No match → OTP sent to your email
+                                </li>
+                                <li><i class="fas fa-map-marker-alt" style="color:#ef4444;"></i> <strong
+                                        style="color:#111;">Strict Range Check:</strong> You must be within **50m** of
+                                    the
+                                    teacher's current location</li>
+                            </ul>
+                        </div>
+
+                    </div><!-- end sd-left -->
+
+                    <!-- RIGHT COLUMN -->
+                    <div class="sd-right">
+
+                        <!-- Stat mini cards -->
+                        <div class="stat-mini-grid">
+                            <div class="stat-mini-card">
+                                <div class="stat-num">{{ my_records|length if my_records else 0 }}</div>
+                                <div class="stat-lbl">Total Classes</div>
+                            </div>
+                            <div class="stat-mini-card">
+                                <div class="stat-num">
+                                    {% if my_records %}
+                                    {{ my_records | selectattr('auth_method', 'equalto', 'Face') | list | length }}
+                                    {% else %}0{% endif %}
+                                </div>
+                                <div class="stat-lbl">Face Verified</div>
+                            </div>
+                        </div>
+
+                        <!-- Recent Attendance Table -->
+                        <div class="sd-card" style="margin-bottom:0;">
+                            <div class="sd-card-header">
+                                <h2><i class="fas fa-history"></i> My Recent Attendance</h2>
+                            </div>
+
+                            {% if my_records %}
+                            <table class="my-att-table">
+                                <thead>
+                                    <tr>
+                                        <th>Subject</th>
+                                        <th>Hour</th>
+                                        <th>Date</th>
+                                        <th>Method</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for r in my_records %}
+                                    <tr>
+                                        <td>{{ r.subject or '—' }}</td>
+                                        <td>{{ r.hour or '—' }}</td>
+                                        <td>{{ r.date }}</td>
+                                        <td>
+                                            {% if r.auth_method == 'Face' %}
+                                            <span class="badge-face"><i class="fas fa-camera"></i> Face</span>
+                                            {% else %}
+                                            <span class="badge-otp"><i class="fas fa-key"></i> OTP</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <div class="empty-sessions">
+                                <i class="fas fa-calendar-times"></i>
+                                <p>No attendance records yet</p>
+                                <small>Mark attendance to see records here</small>
+                            </div>
+                            {% endif %}
+                        </div>
+
+                    </div><!-- end sd-right -->
+
+                </div><!-- end sd-grid -->
+            </div><!-- end sd-content-area -->
+        </div><!-- end sd-main -->
+
+    </div><!-- end sd-wrapper -->
+
+    <script>
+        const GLOBAL_LAT = parseFloat("{{ classroom_lat or 0 }}");
+        const GLOBAL_LON = parseFloat("{{ classroom_lon or 0 }}");
+        const CLASSROOM_RADIUS = 50.0; // Strict 50m radius
+
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371000; // Radius of earth in meters
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            const distanceMeter = document.getElementById('distance-meter');
+            const distanceVal = document.getElementById('distance-val');
+            let lastKnownPos = null;
+
+            // Continuous location tracking for the meter (checks against the first session if available)
+            if (navigator.geolocation) {
+                distanceMeter.classList.remove('hidden');
+                navigator.geolocation.watchPosition((pos) => {
+                    lastKnownPos = pos;
+                    let targetLat = GLOBAL_LAT;
+                    let targetLon = GLOBAL_LON;
+
+                    const firstSession = document.querySelector('.session-item');
+                    if (firstSession) {
+                        targetLat = parseFloat(firstSession.dataset.lat) || GLOBAL_LAT;
+                        targetLon = parseFloat(firstSession.dataset.lon) || GLOBAL_LON;
+                    }
+
+                    const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, targetLat, targetLon);
+                    distanceVal.innerText = dist.toFixed(1) + 'm away';
+
+                    if (dist <= CLASSROOM_RADIUS) {
+                        distanceMeter.style.background = '#f0fdf4';
+                        distanceMeter.style.color = '#16a34a';
+                        distanceMeter.style.borderColor = '#bbf7d0';
+                    } else {
+                        distanceMeter.style.background = '#fef2f2';
+                        distanceMeter.style.color = '#dc2626';
+                        distanceMeter.style.borderColor = '#fecaca';
+                    }
+                }, () => { }, { enableHighAccuracy: true });
+            }
+
+            const forms = document.querySelectorAll('.attendance-form');
+            forms.forEach(form => {
+                form.addEventListener('submit', function (e) {
+                    e.preventDefault();
+                    const btn = form.querySelector('.btn-mark-att');
+                    const originalHtml = btn.innerHTML;
+
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Initializing...';
+
+                    // Layered feedback flow
+                    setTimeout(() => { btn.innerHTML = '<i class="fas fa-satellite"></i> Fetching Geo-Fence...'; }, 800);
+
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const lat = position.coords.latitude;
+                            const lon = position.coords.longitude;
+                            // Identify target location: prefer session-specific coordinates if available
+                            const sessionItem = form.closest('.session-item');
+                            const targetLat = parseFloat(sessionItem.dataset.lat) || GLOBAL_LAT;
+                            const targetLon = parseFloat(sessionItem.dataset.lon) || GLOBAL_LON;
+
+                            const dist = calculateDistance(lat, lon, targetLat, targetLon);
+
+                            if (dist > CLASSROOM_RADIUS) {
+                                alert(`Out of range! You are ${dist.toFixed(1)}m away from the classroom. Required: ${CLASSROOM_RADIUS}m.`);
+                                btn.disabled = false;
+                                btn.innerHTML = originalHtml;
+                                return;
+                            }
+
+                            form.querySelector('.lat-input').value = lat;
+                            form.querySelector('.lon-input').value = lon;
+
+                            setTimeout(() => {
+                                btn.innerHTML = '<i class="fas fa-camera"></i> Scanning Face Ready...';
+                                setTimeout(() => { form.submit(); }, 500);
+                            }, 1000);
+                        },
+                        (error) => {
+                            if (lastKnownPos && (new Date().getTime() - lastKnownPos.timestamp < 15000)) {
+                                const lat = lastKnownPos.coords.latitude;
+                                const lon = lastKnownPos.coords.longitude;
+                                const sessionItem = form.closest('.session-item');
+                                const targetLat = parseFloat(sessionItem.dataset.lat) || GLOBAL_LAT;
+                                const targetLon = parseFloat(sessionItem.dataset.lon) || GLOBAL_LON;
+                                const dist = calculateDistance(lat, lon, targetLat, targetLon);
+
+                                if (dist <= CLASSROOM_RADIUS) {
+                                    form.querySelector('.lat-input').value = lat;
+                                    form.querySelector('.lon-input').value = lon;
+                                    btn.innerHTML = '<i class="fas fa-camera"></i> Scanning Face Ready...';
+                                    setTimeout(() => { form.submit(); }, 500);
+                                    return;
+                                }
+                            }
+                            alert("Geolocation Error: " + error.message);
+                            btn.disabled = false;
+                            btn.innerHTML = originalHtml;
+                        },
+                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
+                    );
+                });
+            });
+        });
+    </script>
+
+    <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
 </body>
+
 </html>

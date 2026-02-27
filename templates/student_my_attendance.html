@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartMark | My Attendance</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/student_dashboard.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        /* ── Page-specific overrides ── */
+        .att-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .summary-stat {
+            background: var(--sd-card-bg);
+            border: 1px solid var(--sd-border);
+            border-radius: 14px;
+            padding: 22px 20px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: var(--sd-shadow);
+            transition: box-shadow 0.2s;
+        }
+
+        .summary-stat:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.09);
+        }
+
+        .summary-stat-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .summary-stat-icon.blue {
+            background: #eff6ff;
+            color: #2563eb;
+        }
+
+        .summary-stat-icon.green {
+            background: #f0fdf4;
+            color: #16a34a;
+        }
+
+        .summary-stat-icon.red {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        .summary-stat-icon.gold {
+            background: #fffbeb;
+            color: #d97706;
+        }
+
+        .summary-stat-val {
+            font-size: 30px;
+            font-weight: 800;
+            color: var(--sd-text-primary);
+            line-height: 1;
+        }
+
+        .summary-stat-lbl {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+            margin-top: 4px;
+        }
+
+        /* ── Subject Cards ── */
+        .subject-att-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 18px;
+            margin-bottom: 28px;
+        }
+
+        .subject-att-card {
+            background: var(--sd-card-bg);
+            border: 1px solid var(--sd-border);
+            border-radius: 14px;
+            padding: 22px 20px;
+            box-shadow: var(--sd-shadow);
+            transition: 0.2s;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .subject-att-card::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            border-radius: 14px 0 0 14px;
+        }
+
+        .subject-att-card.good::before {
+            background: linear-gradient(180deg, #22c55e, #16a34a);
+        }
+
+        .subject-att-card.warning::before {
+            background: linear-gradient(180deg, #f59e0b, #d97706);
+        }
+
+        .subject-att-card.danger::before {
+            background: linear-gradient(180deg, #ef4444, #dc2626);
+        }
+
+        .subject-att-card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.09);
+            transform: translateY(-2px);
+        }
+
+        .subject-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--sd-text-primary);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .subject-name i {
+            color: #2563eb;
+        }
+
+        .subject-progress-bar {
+            height: 8px;
+            background: var(--sd-bg);
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 12px;
+        }
+
+        .subject-progress-fill {
+            height: 100%;
+            border-radius: 6px;
+            transition: width 0.6s ease;
+        }
+
+        .fill-good {
+            background: linear-gradient(90deg, #22c55e, #16a34a);
+        }
+
+        .fill-warning {
+            background: linear-gradient(90deg, #f59e0b, #d97706);
+        }
+
+        .fill-danger {
+            background: linear-gradient(90deg, #ef4444, #dc2626);
+        }
+
+        .subject-stats-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .subject-meta {
+            font-size: 12px;
+            color: #6b7280;
+        }
+
+        .subject-meta span {
+            font-weight: 600;
+            color: var(--sd-text-primary);
+        }
+
+        .pct-pill {
+            font-size: 14px;
+            font-weight: 800;
+            padding: 4px 12px;
+            border-radius: 20px;
+        }
+
+        .pct-pill.good {
+            background: #f0fdf4;
+            color: #16a34a;
+        }
+
+        .pct-pill.warning {
+            background: #fffbeb;
+            color: #d97706;
+        }
+
+        .pct-pill.danger {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        /* ── Overall Donut Card ── */
+        .overall-card {
+            background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+            border-radius: 16px;
+            padding: 28px 24px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 28px;
+            margin-bottom: 24px;
+            box-shadow: var(--sd-shadow);
+        }
+
+        .overall-chart-wrap {
+            width: 120px;
+            height: 120px;
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .overall-pct-label {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            font-weight: 800;
+            color: #fff;
+            line-height: 1;
+        }
+
+        .overall-pct-label small {
+            font-size: 10px;
+            font-weight: 500;
+            opacity: 0.7;
+            margin-top: 2px;
+        }
+
+        .overall-details h2 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .overall-details p {
+            font-size: 13px;
+            opacity: 0.75;
+            margin-bottom: 14px;
+        }
+
+        .overall-stats-row {
+            display: flex;
+            gap: 20px;
+        }
+
+        .overall-stat-item {
+            text-align: center;
+        }
+
+        .overall-stat-item .num {
+            font-size: 22px;
+            font-weight: 800;
+            display: block;
+        }
+
+        .overall-stat-item .lbl {
+            font-size: 11px;
+            opacity: 0.7;
+            font-weight: 500;
+        }
+
+        /* ── History Table ── */
+        .history-section {
+            margin-top: 8px;
+        }
+
+        /* ── Threshold legend ── */
+        .threshold-note {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 12px;
+            color: #6b7280;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        @media (max-width: 900px) {
+            .att-summary-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .overall-card {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .overall-stats-row {
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .att-summary-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .subject-att-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="sd-wrapper">
+
+        <!-- ── SIDEBAR ── -->
+        <aside class="sd-sidebar">
+            <div class="sd-sidebar-header">
+                <img src="{{ url_for('static', filename='images/logo.png') }}" class="sd-sidebar-logo" alt="SmartMark">
+                <span class="sd-sidebar-brand">SmartMark</span>
+            </div>
+            <nav class="sd-nav">
+                <a href="{{ url_for('student_dashboard') }}" class="sd-nav-item">
+                    <i class="fas fa-home"></i><span>Dashboard</span>
+                </a>
+                <a href="{{ url_for('student_my_attendance') }}" class="sd-nav-item active">
+                    <i class="fas fa-history"></i><span>My Attendance</span>
+                </a>
+                <a href="{{ url_for('enroll_face') }}" class="sd-nav-item">
+                    <i class="fas fa-camera"></i><span>Face Enroll</span>
+                </a>
+                <a href="{{ url_for('teacher_dashboard') }}" class="sd-nav-item">
+                    <i class="fas fa-chalkboard-teacher"></i><span>Teacher Portal</span>
+                </a>
+            </nav>
+            <div class="sd-nav-footer">
+                <a href="{{ url_for('student_logout') }}" class="sd-logout-link">
+                    <i class="fas fa-sign-out-alt"></i><span>Logout</span>
+                </a>
+            </div>
+        </aside>
+
+        <!-- ── MAIN ── -->
+        <div class="sd-main">
+
+            <!-- TOP BAR -->
+            <header class="sd-topbar">
+                <div class="sd-topbar-title">
+                    <h1>Smart Attendance System &nbsp;|&nbsp; <span style="font-weight:400;opacity:0.9;">My
+                            Attendance</span></h1>
+                    <span>View your attendance percentage per subject and overall</span>
+                </div>
+                <div class="sd-topbar-right">
+                    <button class="header-btn" id="theme-toggle" title="Toggle Dark Mode"
+                        style="background:none;border:none;color:#fff;cursor:pointer;font-size:16px;margin-right:10px;">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                    <div class="sd-user-badge">
+                        <i class="fas fa-user-circle"></i> {{ student_id }}
+                    </div>
+                </div>
+            </header>
+
+            <div class="sd-content-area">
+
+                <!-- ── OVERALL HERO CARD ── -->
+                {% if overall.sessions_total > 0 %}
+                <div class="overall-card">
+                    <div class="overall-chart-wrap">
+                        <canvas id="overallDonut"></canvas>
+                        <div class="overall-pct-label">
+                            {{ overall.percentage }}%
+                            <small>Overall</small>
+                        </div>
+                    </div>
+                    <div class="overall-details">
+                        <h2>Overall Attendance</h2>
+                        <p>Across all {{ subjects|length }} subject{{ 's' if subjects|length != 1 else '' }}</p>
+                        <div class="overall-stats-row">
+                            <div class="overall-stat-item">
+                                <span class="num">{{ overall.attended }}</span>
+                                <span class="lbl">Attended</span>
+                            </div>
+                            <div class="overall-stat-item">
+                                <span class="num">{{ overall.absent }}</span>
+                                <span class="lbl">Absent</span>
+                            </div>
+                            <div class="overall-stat-item">
+                                <span class="num">{{ overall.sessions_total }}</span>
+                                <span class="lbl">Total Classes</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- ── TOP STAT STRIP ── -->
+                <div class="att-summary-grid">
+                    <div class="summary-stat">
+                        <div class="summary-stat-icon blue"><i class="fas fa-book-open"></i></div>
+                        <div>
+                            <div class="summary-stat-val">{{ subjects|length }}</div>
+                            <div class="summary-stat-lbl">Subjects</div>
+                        </div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-stat-icon green"><i class="fas fa-check-circle"></i></div>
+                        <div>
+                            <div class="summary-stat-val">{{ overall.attended }}</div>
+                            <div class="summary-stat-lbl">Classes Attended</div>
+                        </div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-stat-icon red"><i class="fas fa-times-circle"></i></div>
+                        <div>
+                            <div class="summary-stat-val">{{ overall.absent }}</div>
+                            <div class="summary-stat-lbl">Classes Missed</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── PER-SUBJECT CARDS ── -->
+                {% if subjects %}
+                <div class="sd-section-title">Attendance by Subject</div>
+
+                <div class="threshold-note">
+                    <span><span class="legend-dot" style="background:#22c55e;"></span> ≥ 75% — Safe</span>
+                    <span><span class="legend-dot" style="background:#f59e0b;"></span> 50–74% — At Risk</span>
+                    <span><span class="legend-dot" style="background:#ef4444;"></span> &lt; 50% — Critical</span>
+                    <span style="margin-left:auto;font-style:italic;">Minimum required: 75%</span>
+                </div>
+
+                <div class="subject-att-grid">
+                    {% for sub in subjects %}
+                    {% set cls = 'good' if sub.percentage >= 75 else ('warning' if sub.percentage >= 50 else 'danger')
+                    %}
+                    <div class="subject-att-card {{ cls }}">
+                        <div class="subject-name">
+                            <i class="fas fa-book"></i> {{ sub.subject }}
+                        </div>
+                        <div class="subject-progress-bar">
+                            <div class="subject-progress-fill fill-{{ cls }}"
+                                style="width: {{ [sub.percentage, 0]|max }}%;"></div>
+                        </div>
+                        <div class="subject-stats-row">
+                            <div class="subject-meta">
+                                <span>{{ sub.attended }}</span> / {{ sub.sessions_total }} classes
+                                &nbsp;·&nbsp;
+                                <span>{{ sub.absent }}</span> absent
+                            </div>
+                            <div class="pct-pill {{ cls }}">{{ sub.percentage }}%</div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                {% else %}
+                <div class="sd-card" style="text-align:center;padding:60px 20px;">
+                    <i class="fas fa-chart-bar" style="font-size:36px;color:#bfdbfe;"></i>
+                    <p style="margin-top:16px;font-size:15px;font-weight:600;color:#374151;">No attendance data yet</p>
+                    <p style="font-size:13px;color:#9ca3af;margin-top:6px;">Mark attendance from the Dashboard to see
+                        your stats here.</p>
+                    <a href="{{ url_for('student_dashboard') }}"
+                        style="display:inline-block;margin-top:20px;padding:10px 22px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600;">
+                        <i class="fas fa-arrow-left"></i> Back to Dashboard
+                    </a>
+                </div>
+                {% endif %}
+
+                <!-- ── FULL HISTORY TABLE ── -->
+                {% if all_records %}
+                <div class="history-section">
+                    <div class="sd-section-title" style="margin-top:10px;">Full Attendance History</div>
+                    <div class="sd-card" style="padding:0;overflow:hidden;">
+                        <table class="my-att-table">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th>Subject</th>
+                                    <th>Hour</th>
+                                    <th>Date</th>
+                                    <th>Time</th>
+                                    <th>Method</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for r in all_records %}
+                                <tr>
+                                    <td style="color:#9ca3af;font-size:11px;">{{ loop.index }}</td>
+                                    <td style="font-weight:600;">{{ r.subject or '—' }}</td>
+                                    <td>Hour {{ r.hour or '—' }}</td>
+                                    <td>{{ r.date }}</td>
+                                    <td style="color:#6b7280;font-size:12px;">{{ r.marked_at[:16] if r.marked_at else
+                                        '—' }}</td>
+                                    <td>
+                                        {% if r.auth_method == 'Face' %}
+                                        <span class="badge-face"><i class="fas fa-camera"></i> Face</span>
+                                        {% else %}
+                                        <span class="badge-otp"><i class="fas fa-key"></i> OTP</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <span
+                                            style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;">
+                                            {{ r.status }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endif %}
+
+            </div><!-- end sd-content-area -->
+        </div><!-- end sd-main -->
+    </div><!-- end sd-wrapper -->
+
+    <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
+    <script>
+        // Overall Donut Chart
+        {% if overall.sessions_total > 0 %}
+        var attended = Number("{{ overall.attended or 0 }}");
+        var absent = Number("{{ overall.absent or 0 }}");
+
+        new Chart(document.getElementById('overallDonut'), {
+            type: 'doughnut',
+            data: {
+                labels: ['Attended', 'Absent'],
+                datasets: [{
+                    data: [attended, absent],
+                    backgroundColor: ['#4ade80', 'rgba(255,255,255,0.2)'],
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                cutout: '75%',
+                plugins: { legend: { display: false }, tooltip: { enabled: false } },
+            }
+        });
+        {% endif %}
+    </script>
+</body>
+
+</html>

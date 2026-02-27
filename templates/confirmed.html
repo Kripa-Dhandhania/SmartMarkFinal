@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>SmartMark | Attendance Confirmed</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/student.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="auth-wrapper">
+        <div class="auth-card confirmed-card">
+
+            <!-- SmartMark logo pill -->
+            <div style="text-align:center;margin-bottom:20px;">
+                <div class="auth-logo-pill" style="display:inline-flex;">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="SmartMark Logo">
+                    <span>SmartMark</span>
+                </div>
+                <!-- Theme Toggle -->
+                <button id="theme-toggle" title="Toggle Dark Mode"
+                    style="position:absolute;top:20px;right:20px;background:none;border:none;color:var(--auth-text-muted);cursor:pointer;font-size:16px;">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+
+            <div class="confirmed-icon">
+                <div class="check-ripple">
+                    <i class="fas fa-check-circle"></i>
+                </div>
+            </div>
+
+            <h1 class="confirmed-title">Attendance Marked!</h1>
+            <p class="confirmed-sub">Your attendance has been successfully recorded.</p>
+
+            <div class="confirmed-details">
+                <div class="confirmed-row">
+                    <span class="confirmed-label"><i class="fas fa-user"></i> Student</span>
+                    <span class="confirmed-value">{{ student_id }}</span>
+                </div>
+                {% if att_session %}
+                <div class="confirmed-row">
+                    <span class="confirmed-label"><i class="fas fa-book"></i> Subject</span>
+                    <span class="confirmed-value">{{ att_session.subject }}</span>
+                </div>
+                <div class="confirmed-row">
+                    <span class="confirmed-label"><i class="fas fa-clock"></i> Hour</span>
+                    <span class="confirmed-value">Hour {{ att_session.hour }}</span>
+                </div>
+                <div class="confirmed-row">
+                    <span class="confirmed-label"><i class="fas fa-calendar"></i> Date</span>
+                    <span class="confirmed-value">{{ att_session.date }}</span>
+                </div>
+                {% endif %}
+                <div class="confirmed-row">
+                    <span class="confirmed-label"><i class="fas fa-shield-alt"></i> Verification</span>
+                    <span class="confirmed-value method-val {% if auth_method == 'Face' %}face{% else %}otp{% endif %}">
+                        {% if auth_method == 'Face' %}
+                        <i class="fas fa-camera"></i> Face Recognition
+                        {% else %}
+                        <i class="fas fa-key"></i> OTP Verification
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+
+            <a href="{{ url_for('student_dashboard') }}" class="btn-primary"
+                style="text-decoration:none;display:flex;text-align:center;margin-top:20px;">
+                <i class="fas fa-arrow-left"></i> Back to Dashboard
+            </a>
+
+        </div>
+
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+    </div>
+    <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
+</body>
+
+</html>

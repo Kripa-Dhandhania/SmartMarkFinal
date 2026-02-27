@@ -4,7 +4,6 @@
 <head>
     <meta charset="UTF-8">
     <title>SmartMark | Teacher Dashboard</title>
-
     <link rel="stylesheet" href="{{ url_for('static', filename='css/teacher_dashboard.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
@@ -22,43 +21,49 @@
                     </div>
                 </a>
             </div>
-
             <nav class="sidebar-nav">
-                <a class="nav-item active"><i class="fas fa-home"></i><span>Dashboard</span></a>
+                <a href="{{ url_for('teacher_dashboard') }}" class="nav-item active"><i
+                        class="fas fa-home"></i><span>Dashboard</span></a>
+                <a href="{{ url_for('analytics') }}" class="nav-item"><i
+                        class="fas fa-chart-line"></i><span>Analytics</span></a>
                 <a href="{{ url_for('attendance_report') }}" class="nav-item"><i
                         class="fas fa-chart-bar"></i><span>Attendance Report</span></a>
-                <a class="nav-item"><i class="fas fa-users"></i><span>Student Dashboard</span></a>
-                <a class="nav-item"><i class="fas fa-cog"></i><span>Settings</span></a>
+                <a href="{{ url_for('student_login') }}" class="nav-item"><i
+                        class="fas fa-user-graduate"></i><span>Student Portal</span></a>
+                <div style="flex:1;"></div>
+                <a href="{{ url_for('teacher_logout') }}" class="nav-item logout-btn"><i
+                        class="fas fa-sign-out-alt"></i><span>Logout</span></a>
             </nav>
         </aside>
 
         <!-- MAIN -->
         <main class="main-content">
-
             <header class="top-header">
                 <div class="header-left">
                     <h1>Smart Attendance System | <span>Teacher Dashboard</span></h1>
                 </div>
-
                 <div class="header-right">
-                    <button class="header-btn help-btn" title="Help">
-                        <i class="fas fa-question-circle"></i>
-                        <span>Help</span>
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    {% for category, message in messages %}
+                    <div class="flash-badge flash-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                    {% endif %}
+                    {% endwith %}
+                    <button class="header-btn" id="theme-toggle" title="Toggle Dark Mode">
+                        <i class="fas fa-moon"></i>
                     </button>
-
-                    <a href="/logout" class="header-btn logout-btn" title="Logout">
-                        <i class="fas fa-sign-out-alt"></i>
-                        <span>Logout</span>
-                    </a>
+                    <button class="header-btn help-btn" title="Help"><i
+                            class="fas fa-question-circle"></i><span>Help</span></button>
                 </div>
             </header>
-
 
             <div class="content-wrapper">
 
                 <!-- LEFT -->
                 <div class="left-section">
 
+                    <!-- Profile Card -->
                     <div class="profile-card">
                         <img src="{{ url_for('static', filename='images/teacher.jpg') }}" class="profile-pic">
                         <div class="profile-info">
@@ -68,34 +73,137 @@
                         </div>
                     </div>
 
+                    <!-- Subjects -->
                     <div class="subjects-section">
-                        <h3>My Subjects</h3>
-
+                        <h3>My Subjects — Enable Attendance</h3>
                         <div class="subjects-grid">
                             {% for subject in subjects %}
                             <div class="subject-card">
-
                                 <h4>{{ subject.name }}</h4>
                                 <p>{{ subject.class_info }}</p>
 
-                                <button class="enable-btn" data-duration="300">
-                                    Enable Attendance
-                                </button>
-
-                                <!-- TIMER (hidden initially) -->
-                                <div class="attendance-timer hidden">
-                                    <svg class="timer-circle" viewBox="0 0 120 120">
-                                        <circle cx="60" cy="60" r="55" class="timer-bg"></circle>
-                                        <circle cx="60" cy="60" r="55" class="timer-progress"></circle>
-                                    </svg>
-                                    <div class="timer-text">05:00</div>
-                                    <p class="timer-status">Attendance Active</p>
-                                </div>
+                                <!-- Enable attendance via real backend -->
+                                <form method="POST" action="{{ url_for('teacher_create_session') }}" style="margin:0;">
+                                    <input type="hidden" name="subject" value="{{ subject.name }}">
+                                    <input type="hidden" name="latitude" class="teacher-lat">
+                                    <input type="hidden" name="longitude" class="teacher-lon">
+                                    <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px;">
+                                        <div style="display:flex; gap:5px;">
+                                            <select name="hour" class="hour-select" required style="flex:1;">
+                                                <option value="" disabled selected>Select Hour</option>
+                                                <option value="1" {% if current_hour==1 %}selected{% endif %}>Hour 1
+                                                    (7:30AM-9:00AM)</option>
+                                                <option value="2" {% if current_hour==2 %}selected{% endif %}>Hour 2
+                                                    (9:45AM-10:45AM)</option>
+                                                <option value="3" {% if current_hour==3 %}selected{% endif %}>Hour 3
+                                                    (10:45AM-11:45AM)</option>
+                                                <option value="4" {% if current_hour==4 %}selected{% endif %}>Hour 4
+                                                    (11:45AM-12:45PM)</option>
+                                                <option value="5" {% if current_hour==5 %}selected{% endif %}>Hour 5
+                                                    (12:45PM-1:45PM)</option>
+                                            </select>
+                                            <select name="duration" class="duration-select"
+                                                style="width:80px; font-size:12px; border-radius:6px; border:1px solid var(--border-color);">
+                                                <option value="5">5 min</option>
+                                                <option value="10">10 min</option>
+                                                <option value="15">15 min</option>
+                                                <option value="30">30 min</option>
+                                            </select>
+                                        </div>
+                                        <button type="submit" class="enable-btn" style="margin-top:0;">
+                                            <i class="fas fa-bolt"></i> Enable Attendance
+                                        </button>
+                                    </div>
+                                </form>
 
                             </div>
                             {% endfor %}
                         </div>
                     </div>
+
+                    <!-- Active Sessions -->
+                    {% if active_sessions %}
+                    <div class="subjects-section">
+                        <h3><i class="fas fa-clock" style="color:#22c55e;"></i> Active Sessions
+                            <span style="font-size:11px;color:#9ca3af;font-weight:400;margin-left:8px;">Auto-closes in 5
+                                min</span>
+                        </h3>
+                        <div class="active-sessions-list">
+                            {% for s in active_sessions %}
+                            <div class="session-row" id="session-row-{{ s.id }}" data-ttl="{{ s.ttl }}">
+                                <div class="session-info">
+                                    <span class="session-dot"></span>
+                                    <div>
+                                        <strong>{{ s.subject }}</strong>
+                                        <small>Hour {{ s.hour }} ({{ hour_labels.get(s.hour|string, '') }}) &middot; {{
+                                            s.date }}</small>
+                                    </div>
+                                </div>
+                                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
+                                    <div style="display:flex;align-items:center;gap:10px;">
+                                        <!-- Manual override button -->
+                                        <button class="manual-mark-btn" data-session-id="{{ s.id }}"
+                                            title="Manually mark student present"
+                                            style="background:none; border:1px solid var(--accent-blue); color:var(--accent-blue); 
+                                                       padding:4px 10px; border-radius:20px; font-size:12px; cursor:pointer; font-weight:600;">
+                                            <i class="fas fa-user-plus"></i> Manual
+                                        </button>
+
+                                        <!-- Countdown display -->
+                                        <span class="session-timer" id="timer-{{ s.id }}" data-session-id="{{ s.id }}"
+                                            data-created-at="{{ s.created_at }}" style="display:inline-flex;align-items:center;gap:5px;
+                                                     background:#fef2f2;border:1px solid #fecaca;
+                                                     color:#dc2626;border-radius:20px;
+                                                     padding:4px 12px;font-size:12px;font-weight:700;">
+                                            <i class="fas fa-hourglass-half"></i>
+                                            <span class="timer-text">5:00</span>
+                                        </span>
+                                        <select class="extend-mins-select" title="Select minutes to extend" style="height:32px;padding:0 8px;border:1px solid #bbf7d0;border-radius:16px;
+                                                   font-size:12px;background:#f0fdf4;color:#16a34a;cursor:pointer;font-weight:600;
+                                                   outline:none;transition: all 0.2s;">
+                                            <option value="" disabled selected>Extend</option>
+                                            <option value="2">+2 min</option>
+                                            <option value="5">+5 min</option>
+                                            <option value="10">+10 min</option>
+                                        </select>
+                                        <form method="POST"
+                                            action="{{ url_for('teacher_close_session', session_id=s.id) }}"
+                                            style="margin:0;">
+                                            <button type="submit" class="close-btn">
+                                                <i class="fas fa-times"></i> Close
+                                            </button>
+                                        </form>
+                                    </div>
+
+                                    <!-- Hidden Manual Mark Search -->
+                                    <div class="manual-mark-search-container hidden" id="search-{{ s.id }}"
+                                        style="margin-top:5px; position:relative;">
+                                        <div style="display:flex; gap:8px;">
+                                            <input type="text" class="manual-student-search"
+                                                placeholder="Enter Register Number..."
+                                                style="flex:1; padding:6px 14px; border-radius:20px; border:2px solid var(--accent-blue); font-size:13px; outline:none;">
+                                            <button class="manual-mark-submit-btn"
+                                                style="padding:6px 12px; border-radius:20px; background:var(--accent-blue); color:white; border:none; font-size:12px; font-weight:600; cursor:pointer;">
+                                                Mark
+                                            </button>
+                                        </div>
+                                        <div
+                                            style="font-size:10px; color:var(--text-muted); margin-top:4px; padding-left:10px;">
+                                            <i class="fas fa-info-circle"></i> Type and select from list, or press Enter
+                                        </div>
+                                        <div class="search-results-dropdown hidden"
+                                            style="position:relative; margin-top:5px;
+                                                     background:var(--card-bg); border:1px solid var(--border-color); 
+                                                     border-radius:10px; box-shadow:var(--shadow); z-index:100; max-height:200px; overflow-y:auto; width:250px;">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+
 
                 </div>
 
@@ -104,54 +212,51 @@
                     <div class="stats-card">
                         <h3>Quick Stats</h3>
 
-                        <!-- TOTAL -->
                         <div class="stat-item">
                             <label>Total Students</label>
-                            <div class="stat-value">56</div>
-                            <svg viewBox="0 0 100 40" class="sparkline">
-                                <polygon points="5,35 15,25 25,30 35,15 45,20 55,10 65,18 75,8 85,22 95,5 95,40 5,40"
-                                    fill="rgba(34,197,94,0.25)" />
-                                <polyline points="5,35 15,25 25,30 35,15 45,20 55,10 65,18 75,8 85,22 95,5" fill="none"
-                                    stroke="#22c55e" stroke-width="2" />
-                            </svg>
+                            <div class="stat-value">{{ stats.total_students }}</div>
                         </div>
 
-                        <!-- PRESENT -->
                         <div class="stat-item">
                             <label>Present Today</label>
-                            <div class="stat-value present">85</div>
-                            <svg viewBox="0 0 100 40" class="sparkline">
-                                <polygon points="5,35 15,28 25,22 35,18 45,15 55,12 65,10 75,8 85,6 95,5 95,40 5,40"
-                                    fill="rgba(34,197,94,0.25)" />
-                                <polyline points="5,35 15,28 25,22 35,18 45,15 55,12 65,10 75,8 85,6 95,5" fill="none"
-                                    stroke="#22c55e" stroke-width="2" />
-                            </svg>
+                            <div class="stat-value present">{{ stats.present_today }}</div>
                         </div>
 
-                        <!-- ABSENT -->
                         <div class="stat-item">
                             <label>Absent Today</label>
-                            <div class="stat-value absent">35</div>
-                            <svg viewBox="0 0 100 40" class="sparkline">
-                                <polygon points="5,15 15,20 25,25 35,22 45,28 55,25 65,30 75,28 85,32 95,35 95,40 5,40"
-                                    fill="rgba(239,68,68,0.25)" />
-                                <polyline points="5,15 15,20 25,25 35,22 45,28 55,25 65,30 75,28 85,32 95,35"
-                                    fill="none" stroke="#ef4444" stroke-width="2" />
-                            </svg>
+                            <div class="stat-value absent">{{ stats.absent_today }}</div>
                         </div>
 
-                        <!-- PERCENT -->
                         <div class="stat-item">
                             <label>Attendance %</label>
-                            <div class="stat-value percentage">70%</div>
-                            <svg viewBox="0 0 100 40" class="sparkline">
-                                <polygon points="5,20 15,18 25,16 35,15 45,17 55,14 65,16 75,12 85,13 95,10 95,40 5,40"
-                                    fill="rgba(59,130,246,0.25)" />
-                                <polyline points="5,20 15,18 25,16 35,15 45,17 55,14 65,16 75,12 85,13 95,10"
-                                    fill="none" stroke="#3b82f6" stroke-width="2" />
-                            </svg>
+                            <div class="stat-value percentage">{{ stats.attendance_pct }}%</div>
                         </div>
 
+                        <div class="stat-item">
+                            <label>Sessions Today</label>
+                            <div class="stat-value" style="color:#a78bfa;">{{ stats.sessions_today }}</div>
+                        </div>
+
+                        <div class="stat-divider"></div>
+
+                        <div class="stat-item">
+                            <label>Face Verified</label>
+                            <div class="stat-value" style="color:#22c55e;">{{ stats.face_count }}</div>
+                        </div>
+
+                        <div class="stat-item">
+                            <label>OTP Verified</label>
+                            <div class="stat-value" style="color:#f59e0b;">{{ stats.otp_count }}</div>
+                        </div>
+
+                        <div class="stat-item">
+                            <label>Avg Confidence</label>
+                            <div class="stat-value percentage">{{ stats.avg_confidence }}</div>
+                        </div>
+
+                        <a href="{{ url_for('analytics') }}" class="analytics-link">
+                            <i class="fas fa-chart-line"></i> View Full Analytics
+                        </a>
                     </div>
                 </aside>
 
@@ -159,7 +264,44 @@
         </main>
     </div>
 
+    <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
     <script src="{{ url_for('static', filename='js/teacher_dashboard.js') }}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const enableForms = document.querySelectorAll('form[action="{{ url_for("teacher_create_session") }}"]');
+
+            enableForms.forEach(form => {
+                form.addEventListener('submit', function (e) {
+                    // We only prevent default if we don't have coordinates yet
+                    const latInput = form.querySelector('.teacher-lat');
+                    const lonInput = form.querySelector('.teacher-lon');
+                    const btn = form.querySelector('.enable-btn');
+
+                    if (!latInput.value || !lonInput.value) {
+                        e.preventDefault();
+                        const originalHtml = btn.innerHTML;
+                        btn.disabled = true;
+                        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Locating Classroom...';
+
+                        navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                                latInput.value = pos.coords.latitude;
+                                lonInput.value = pos.coords.longitude;
+                                btn.innerHTML = '<i class="fas fa-check"></i> Starting...';
+                                setTimeout(() => { form.submit(); }, 300);
+                            },
+                            (err) => {
+                                alert("Location Error: " + err.message + ". Please allow location access to start session.");
+                                btn.disabled = false;
+                                btn.innerHTML = originalHtml;
+                            },
+                            { enableHighAccuracy: true, timeout: 5000 }
+                        );
+                    }
+                });
+            });
+        });
+    </script>
 </body>
 
 </html>

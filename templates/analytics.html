@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>SmartMark | Analytics Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/teacher_dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/analytics.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+
+<body>
+    <div class="wrapper">
+
+        <!-- SIDEBAR -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="{{ url_for('teacher_dashboard') }}" class="logo-link">
+                    <div class="logo-section">
+                        <img src="{{ url_for('static', filename='images/logo.png') }}" class="sidebar-logo">
+                        <span class="brand-name">SmartMark</span>
+                    </div>
+                </a>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('teacher_dashboard') }}" class="nav-item"><i
+                        class="fas fa-home"></i><span>Dashboard</span></a>
+                <a href="{{ url_for('analytics') }}" class="nav-item active"><i
+                        class="fas fa-chart-line"></i><span>Analytics</span></a>
+                <a href="{{ url_for('attendance_report') }}" class="nav-item"><i
+                        class="fas fa-chart-bar"></i><span>Attendance Report</span></a>
+                <a href="{{ url_for('student_login') }}" class="nav-item"><i
+                        class="fas fa-user-graduate"></i><span>Student Portal</span></a>
+                <div style="flex:1;"></div>
+                <a href="{{ url_for('teacher_logout') }}" class="nav-item logout-btn"><i
+                        class="fas fa-sign-out-alt"></i><span>Logout</span></a>
+            </nav>
+        </aside>
+
+        <!-- MAIN -->
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-left">
+                    <h1>Smart Attendance System | <span>Analytics Dashboard</span></h1>
+                </div>
+                <div class="header-right">
+                    <button class="header-btn" id="theme-toggle" title="Toggle Dark Mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+
+                    <form action="{{ url_for('teacher_send_alerts') }}" method="POST" style="margin:0;">
+                        <button type="submit" class="header-btn" style="color:#ef4444;"
+                            title="Notify students below 75%">
+                            <i class="fas fa-bullhorn"></i><span>Send Alerts</span>
+                        </button>
+                    </form>
+
+                    <form action="{{ url_for('teacher_send_weekly_digest') }}" method="POST" style="margin:0;">
+                        <button type="submit" class="header-btn" style="color:#10b981;"
+                            title="Email weekly summary to yourself">
+                            <i class="fas fa-envelope-open-text"></i><span>Weekly Digest</span>
+                        </button>
+                    </form>
+
+                    <a href="{{ url_for('download_report') }}" class="header-btn" style="color:#2563eb;">
+                        <i class="fas fa-download"></i><span>Export CSV</span>
+                    </a>
+                </div>
+            </header>
+
+            <div class="analytics-wrapper">
+
+                <!-- Active Session Status Banner -->
+                <div id="active-session-banner"
+                    style="display:none; background:rgba(59,130,246,0.1); border-left:4px solid #3b82f6; padding:15px; margin-bottom:20px; border-radius:8px; display:flex; justify-content:between; align-items:center;">
+                    <div>
+                        <span style="color:#3b82f6; font-weight:600; font-size:1.1rem;"><i
+                                class="fas fa-broadcast-tower"></i> LIVE SESSION ACTIVE</span>
+                        <div id="active-session-info"
+                            style="color:var(--text-muted); font-size:0.9rem; margin-top:4px;">
+                            Subject: <strong id="active-subject">-</strong> | Hour: <strong id="active-hour">-</strong>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <span class="pct-badge pct-ok" id="session-percentage"
+                            style="font-size:1.2rem; padding:8px 15px;">0%</span>
+                    </div>
+                </div>
+
+                <!-- KPI Cards Row -->
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:rgba(34,197,94,.15);color:#22c55e;"><i
+                                class="fas fa-users"></i></div>
+                        <div class="kpi-info"><span class="kpi-value" id="kpi-total-students">{{ stats.total_students
+                                }}</span><span class="kpi-label">Total Students</span></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:rgba(59,130,246,.15);color:#3b82f6;"><i
+                                class="fas fa-user-check"></i></div>
+                        <div class="kpi-info"><span class="kpi-value" id="kpi-present-today">{{ stats.present_today
+                                }}</span><span class="kpi-label">Present Today</span></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:rgba(239,68,68,.15);color:#ef4444;"><i
+                                class="fas fa-user-times"></i></div>
+                        <div class="kpi-info"><span class="kpi-value" id="kpi-absent-today">{{ stats.absent_today
+                                }}</span><span class="kpi-label">Absent Today</span></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:rgba(167,139,250,.15);color:#a78bfa;"><i
+                                class="fas fa-percentage"></i></div>
+                        <div class="kpi-info"><span class="kpi-value" id="kpi-attendance-pct">{{ stats.attendance_pct
+                                }}%</span><span class="kpi-label">Attendance Rate</span></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:rgba(34,197,94,.15);color:#22c55e;"><i
+                                class="fas fa-camera"></i></div>
+                        <div class="kpi-info"><span class="kpi-value" id="kpi-face-count">{{ stats.face_count
+                                }}</span><span class="kpi-label">Face Verified</span></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background:rgba(245,158,11,.15);color:#f59e0b;"><i
+                                class="fas fa-key"></i></div>
+                        <div class="kpi-info"><span class="kpi-value" id="kpi-otp-count">{{ stats.otp_count
+                                }}</span><span class="kpi-label">OTP Verified</span></div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="charts-row">
+                    <!-- Attendance Trend -->
+                    <div class="chart-card chart-large">
+                        <h3><i class="fas fa-chart-area"></i> 7-Day Attendance Trend</h3>
+                        <canvas id="trendChart" height="120"></canvas>
+                    </div>
+
+                    <!-- Verification Donut -->
+                    <div class="chart-card chart-small">
+                        <h3><i class="fas fa-chart-pie"></i> Verification Methods</h3>
+                        <canvas id="methodChart" height="160"></canvas>
+                        <div class="donut-legend">
+                            <span class="legend-dot" style="background:#22c55e;"></span> Face ({{ stats.face_count }})
+                            &nbsp;
+                            <span class="legend-dot" style="background:#f59e0b;"></span> OTP ({{ stats.otp_count }})
+                            &nbsp;
+                            <span class="legend-dot" style="background:#3b82f6;"></span> Manual ({{ stats.manual_count
+                            }})
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Defaulters + Student Summary Row -->
+                <div class="tables-row">
+                    <!-- Defaulters -->
+                    <div class="table-card">
+                        <h3><i class="fas fa-exclamation-triangle" style="color:#ef4444;"></i> Defaulters (Below 75%)
+                        </h3>
+                        <div id="defaulters-container">
+                            {% if defaulters %}
+                            <table class="att-table">
+                                <thead>
+                                    <tr>
+                                        <th>Student ID</th>
+                                        <th>Name</th>
+                                        <th>Attended</th>
+                                        <th>Total</th>
+                                        <th>%</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="defaulters-body">
+                                    {% for d in defaulters %}
+                                    <tr>
+                                        <td>{{ d.student_id }}</td>
+                                        <td>{{ d.name }}</td>
+                                        <td>{{ d.attended }}</td>
+                                        <td>{{ d.total }}</td>
+                                        <td><span class="pct-badge pct-low">{{ d.percentage }}%</span></td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <div class="empty-state"><i class="fas fa-check-circle"></i> No defaulters! All students
+                                above
+                                75%.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- Student Summary -->
+                    <div class="table-card">
+                        <h3><i class="fas fa-list-ol"></i> Student Attendance Summary</h3>
+                        <div id="summary-container">
+                            {% if students %}
+                            <table class="att-table">
+                                <thead>
+                                    <tr>
+                                        <th>Student ID</th>
+                                        <th>Name</th>
+                                        <th>Attended</th>
+                                        <th>%</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="summary-body">
+                                    {% for s in students %}
+                                    <tr>
+                                        <td>{{ s.student_id }}</td>
+                                        <td>{{ s.name }}</td>
+                                        <td>{{ s.attended }}/{{ s.total }}</td>
+                                        <td>
+                                            <span
+                                                class="pct-badge {% if s.percentage >= 75 %}pct-ok{% else %}pct-low{% endif %}">
+                                                {{ s.percentage }}%
+                                            </span>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <div class="empty-state"><i class="fas fa-info-circle"></i> No attendance data yet.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- end analytics-wrapper -->
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
+    <script>
+        // Use server-side data for first render
+        let trendDataArr = {{ daily_trend | tojson }};
+        let statsData = {{ stats | tojson }};
+
+        const trendCtx = document.getElementById('trendChart').getContext('2d');
+        const methodCtx = document.getElementById('methodChart').getContext('2d');
+
+        let trendChart = new Chart(trendCtx, {
+            type: 'line',
+            data: {
+                labels: trendDataArr.map(d => d.date),
+                datasets: [{
+                    label: 'Students Present',
+                    data: trendDataArr.map(d => d.count),
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59,130,246,0.12)',
+                    borderWidth: 2.5, pointRadius: 5, fill: true, tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: { legend: { labels: { color: '#555' } } },
+                scales: {
+                    x: { ticks: { color: '#666' } },
+                    y: { ticks: { color: '#666', stepSize: 1 }, beginAtZero: true }
+                }
+            }
+        });
+
+        let methodChart = new Chart(methodCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Face', 'OTP', 'Manual'],
+                datasets: [{
+                    data: [statsData.face_count, statsData.otp_count, statsData.manual_count],
+                    backgroundColor: ['#22c55e', '#f59e0b', '#3b82f6'],
+                    borderWidth: 0, hoverOffset: 6
+                }]
+            },
+            options: { cutout: '65%', plugins: { legend: { display: false } } }
+        });
+
+        async function refreshAnalytics() {
+            try {
+                const res = await fetch('/api/analytics/live');
+                const data = await res.json();
+
+                // Update KPIs
+                const stats = data.active_session ? data.active_session : data.stats;
+
+                // If we have an active session, we focus on that session's counts
+                if (data.active_session) {
+                    document.getElementById('active-session-banner').style.display = 'flex';
+                    document.getElementById('active-subject').innerText = data.active_session.subject;
+                    document.getElementById('active-hour').innerText = data.active_session.hour;
+                    document.getElementById('session-percentage').innerText = data.active_session.percentage + '%';
+
+                    document.getElementById('kpi-total-students').innerText = data.active_session.total_students;
+                    document.getElementById('kpi-present-today').innerText = data.active_session.present_count;
+                    document.getElementById('kpi-absent-today').innerText = data.active_session.total_students - data.active_session.present_count;
+                    document.getElementById('kpi-attendance-pct').innerText = data.active_session.percentage + '%';
+                    document.getElementById('kpi-face-count').innerText = data.active_session.face_count;
+                    document.getElementById('kpi-otp-count').innerText = data.active_session.otp_count;
+
+                    // Update Donut Legend
+                    document.getElementById('legend-face').innerText = data.active_session.face_count;
+                    document.getElementById('legend-otp').innerText = data.active_session.otp_count;
+                    document.getElementById('legend-manual').innerText = data.active_session.manual_count;
+
+                    // Update Donut Chart
+                    methodChart.data.datasets[0].data = [data.active_session.face_count, data.active_session.otp_count, data.active_session.manual_count];
+                } else {
+                    document.getElementById('active-session-banner').style.display = 'none';
+
+                    document.getElementById('kpi-total-students').innerText = data.stats.total_students;
+                    document.getElementById('kpi-present-today').innerText = data.stats.present_today;
+                    document.getElementById('kpi-absent-today').innerText = data.stats.absent_today;
+                    document.getElementById('kpi-attendance-pct').innerText = data.stats.attendance_pct + '%';
+                    document.getElementById('kpi-face-count').innerText = data.stats.face_count;
+                    document.getElementById('kpi-otp-count').innerText = data.stats.otp_count;
+
+                    // Update Donut Legend
+                    document.getElementById('legend-face').innerText = data.stats.face_count;
+                    document.getElementById('legend-otp').innerText = data.stats.otp_count;
+                    document.getElementById('legend-manual').innerText = data.stats.manual_count;
+
+                    // Update Donut Chart
+                    methodChart.data.datasets[0].data = [data.stats.face_count, data.stats.otp_count, data.stats.manual_count];
+                }
+
+                methodChart.update();
+
+                // Update Trend Chart
+                trendChart.data.labels = data.daily_trend.map(d => d.date);
+                trendChart.data.datasets[0].data = data.daily_trend.map(d => d.count);
+                trendChart.update();
+
+                // Update Defaulters Table
+                const defBody = document.getElementById('defaulters-body');
+                if (data.defaulters.length > 0) {
+                    if (!defBody) {
+                        // If it was empty state, rebuild table
+                        document.getElementById('defaulters-container').innerHTML = `
+                            <table class="att-table">
+                                <thead><tr><th>Student ID</th><th>Name</th><th>Attended</th><th>Total</th><th>%</th></tr></thead>
+                                <tbody id="defaulters-body"></tbody>
+                            </table>`;
+                    }
+                    const newHtml = data.defaulters.map(d => `
+                        <tr>
+                            <td>${d.student_id}</td>
+                            <td>${d.name}</td>
+                            <td>${d.attended}</td>
+                            <td>${d.total}</td>
+                            <td><span class="pct-badge pct-low">${d.percentage}%</span></td>
+                        </tr>`).join('');
+                    document.getElementById('defaulters-body').innerHTML = newHtml;
+                }
+
+                // Update Summary Table
+                const sumBody = document.getElementById('summary-body');
+                if (data.students.length > 0) {
+                    if (!sumBody) {
+                        document.getElementById('summary-container').innerHTML = `
+                             <table class="att-table">
+                                <thead><tr><th>Student ID</th><th>Name</th><th>Attended</th><th>%</th></tr></thead>
+                                <tbody id="summary-body"></tbody>
+                            </table>`;
+                    }
+                    const newHtml = data.students.map(s => `
+                        <tr>
+                            <td>${s.student_id}</td>
+                            <td>${s.name}</td>
+                            <td>${s.attended}/${s.total}</td>
+                            <td><span class="pct-badge ${s.percentage >= 75 ? 'pct-ok' : 'pct-low'}">${s.percentage}%</span></td>
+                        </tr>`).join('');
+                    document.getElementById('summary-body').innerHTML = newHtml;
+                }
+
+            } catch (e) { console.error("Poll error:", e); }
+        }
+
+        setInterval(refreshAnalytics, 5000);
+    </script>
+</body>
+
+</html>

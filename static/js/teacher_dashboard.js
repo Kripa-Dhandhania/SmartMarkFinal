@@ -1,61 +1,232 @@
-document.querySelectorAll(".enable-btn").forEach(button => {
+// SmartMark Teacher Dashboard JS
+
+// ── Help button ──────────────────────────────────────────────────────────────
 document.querySelector(".help-btn")?.addEventListener("click", () => {
     alert(
-        "SmartMark Help\n\n" +
-        "• Enable attendance from subject cards\n" +
-        "• Attendance auto-disables after 5 minutes\n" +
-        "• View reports from Attendance Report\n\n" +
+        "SmartMark Teacher Help\n\n" +
+        "• Select an hour from the dropdown, then click 'Enable Attendance'\n" +
+        "• Attendance auto-closes after 5 minutes\n" +
+        "• You can also click 'Close' to stop attendance early\n" +
+        "• Students mark attendance via the Student Portal (/student/login)\n" +
+        "• View Analytics & Reports from the sidebar\n\n" +
         "For support, contact admin."
     );
 });
 
-    button.addEventListener("click", () => {
+// ── 5-Minute Session Countdown Timers ────────────────────────────────────────
+// ── Session Countdown Timers (Modified for Dynamic TTL) ───────────────────────
 
-        const card = button.closest(".subject-card");
-        const timerBox = card.querySelector(".attendance-timer");
-        const timerText = card.querySelector(".timer-text");
-        const statusText = card.querySelector(".timer-status");
-        const progressCircle = card.querySelector(".timer-progress");
+function initTimers() {
+    const timers = document.querySelectorAll('.session-timer');
+    if (!timers.length) return;
 
-        const duration = 300;
-        let remaining = duration;
+    timers.forEach(function (timerEl) {
+        const sessionId = timerEl.dataset.sessionId;
+        const createdAt = timerEl.dataset.createdAt;   // "YYYY-MM-DD HH:MM:SS"
+        const ttl = parseInt(timerEl.closest('.session-row')?.dataset?.ttl || 5);
+        const textEl = timerEl.querySelector('.timer-text');
 
-        const radius = 55;
-        const circumference = 2 * Math.PI * radius;
+        // SQLite stores CURRENT_TIMESTAMP as UTC — append 'Z' so JS Date parses it correctly
+        const createdMs = new Date(createdAt.replace(' ', 'T') + 'Z').getTime();
+        let expiresAt = createdMs + (ttl * 60 * 1000);
+        console.log(`[Timer] Initialized session ${sessionId} - expires at: ${new Date(expiresAt)} (TTL: ${ttl}m)`);
 
-        progressCircle.style.strokeDasharray = circumference;
-        progressCircle.style.strokeDashoffset = 0;
-
-        button.classList.add("hidden");
-        timerBox.classList.remove("hidden");
-
-        const interval = setInterval(() => {
-            remaining--;
-
-            const minutes = Math.floor(remaining / 60);
-            const seconds = remaining % 60;
-
-            timerText.textContent =
-                `${minutes}:${seconds.toString().padStart(2, "0")}`;
-
-            progressCircle.style.strokeDashoffset =
-                circumference - (remaining / duration) * circumference;
+        function tick() {
+            const remaining = expiresAt - Date.now();
 
             if (remaining <= 0) {
-                clearInterval(interval);
-                statusText.textContent = "Attendance Disabled";
-                statusText.style.color = "#ef4444";
+                // Time's up – auto-close via AJAX
+                textEl.textContent = '0:00';
+                timerEl.style.background = '#dc2626';
+                timerEl.style.color = '#fff';
 
-                setTimeout(() => {
-                    timerBox.classList.add("hidden");
-                    button.classList.remove("hidden");
-                    timerText.textContent = "05:00";
-                    statusText.textContent = "Attendance Active";
-                    statusText.style.color = "#22c55e";
-                    progressCircle.style.strokeDashoffset = 0;
-                }, 1500);
+                fetch('/teacher/api/close-session/' + sessionId, { method: 'POST' })
+                    .then(function () {
+                        var row = document.getElementById('session-row-' + sessionId);
+                        if (row) {
+                            row.style.transition = 'opacity 0.5s';
+                            row.style.opacity = '0';
+                            setTimeout(() => {
+                                row.remove();
+                                if (!document.querySelector('.session-row')) location.reload();
+                            }, 600);
+                        }
+                    })
+                    .catch(() => location.reload());
+                return;
             }
-        }, 1000);
+
+            const totalSec = Math.ceil(remaining / 1000);
+            const mins = Math.floor(totalSec / 60);
+            const secs = totalSec % 60;
+            textEl.textContent = mins + ':' + String(secs).padStart(2, '0');
+
+            if (remaining < 60000) {
+                timerEl.style.background = '#fffbeb';
+                timerEl.style.borderColor = '#fde68a';
+                timerEl.style.color = '#d97706';
+            } else {
+                timerEl.style.background = '#fef2f2';
+                timerEl.style.borderColor = '#fecaca';
+                timerEl.style.color = '#dc2626';
+            }
+            setTimeout(tick, 1000);
+        }
+
+        // ── Extension Logic ──────────────────────────────────────────────────
+        var minsSelect = timerEl.parentElement.querySelector('.extend-mins-select');
+        if (minsSelect) {
+            minsSelect.onchange = function () {
+                const addMins = parseInt(this.value);
+                if (!addMins) return;
+                minsSelect.disabled = true;
+                fetch('/teacher/api/extend-session/' + sessionId, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ minutes: addMins })
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            expiresAt += (addMins * 60 * 1000);
+                            timerEl.style.background = '#fef2f2';
+                            timerEl.style.color = '#dc2626';
+                        }
+                    })
+                    .finally(() => {
+                        setTimeout(() => {
+                            minsSelect.disabled = false;
+                            minsSelect.value = "";
+                        }, 500);
+                    });
+            };
+        }
+
+        tick();
+    });
+}
+
+// ── Manual Mark Logic ─────────────────────────────────────────────────────────
+function initManualMark() {
+    const markButtons = document.querySelectorAll('.manual-mark-btn');
+
+    markButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            const sessionId = btn.dataset.sessionId;
+            const searchContainer = document.getElementById('search-' + sessionId);
+            searchContainer.classList.toggle('hidden');
+            if (!searchContainer.classList.contains('hidden')) {
+                searchContainer.querySelector('input').focus();
+            }
+        });
     });
 
+    const searchInputs = document.querySelectorAll('.manual-student-search');
+    searchInputs.forEach(input => {
+        const container = input.closest('.manual-mark-search-container');
+        const dropdown = container.querySelector('.search-results-dropdown');
+        const sessionId = container.id.split('-')[1];
+
+        function markManual(studentId, studentName = null) {
+            const displayName = studentName || studentId;
+            if (confirm(`Mark ${displayName} as present?`)) {
+                fetch('/teacher/api/manual-mark-attendance', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ student_id: studentId, session_id: sessionId })
+                })
+                    .then(res => res.json())
+                    .then(resData => {
+                        if (resData.success) {
+                            alert("Attendance marked successfully!");
+                            container.classList.add('hidden');
+                            input.value = '';
+                        } else {
+                            alert("Error: " + resData.error);
+                        }
+                    });
+            }
+            dropdown.classList.add('hidden');
+        }
+
+        let timeout = null;
+        input.addEventListener('input', () => {
+            clearTimeout(timeout);
+            const query = input.value.trim();
+            if (query.length < 1) {
+                dropdown.classList.add('hidden');
+                return;
+            }
+
+            timeout = setTimeout(() => {
+                console.log(`[ManualMark] Searching for: ${query}`);
+                fetch(`/api/students/search?q=${encodeURIComponent(query)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.length === 0) {
+                            dropdown.innerHTML = '<div style="padding:10px; font-size:12px; color:#999;">No results</div>';
+                        } else {
+                            dropdown.innerHTML = data.map(s => `
+                                <div class="search-item" data-id="${s.id}" data-name="${s.name}"
+                                     style="padding:8px 12px; cursor:pointer; border-bottom:1px solid #eee; font-size:13px;">
+                                    <strong>${s.name}</strong> <small style="color:#666;">(${s.id})</small>
+                                </div>
+                            `).join('');
+
+                            dropdown.querySelectorAll('.search-item').forEach(item => {
+                                item.addEventListener('click', () => {
+                                    markManual(item.dataset.id, item.dataset.name);
+                                });
+                            });
+                        }
+                        dropdown.classList.remove('hidden');
+                    });
+            }, 300);
+        });
+
+        // Handle Enter key to mark automatically if single result or perfect match
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const val = input.value.trim();
+                if (!val) return;
+
+                const items = dropdown.querySelectorAll('.search-item');
+                // If single result or perfect ID match, use it
+                if (items.length === 1) {
+                    markManual(items[0].dataset.id, items[0].dataset.name);
+                    return;
+                }
+
+                const perfectMatch = Array.from(items).find(item => item.dataset.id === val);
+                if (perfectMatch) {
+                    markManual(perfectMatch.dataset.id, perfectMatch.dataset.name);
+                    return;
+                }
+
+                // Fallback: try marking the raw input directly as ID
+                markManual(val);
+            }
+        });
+
+        // Handle submit button click
+        const submitBtn = container.querySelector('.manual-mark-submit-btn');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', () => {
+                const val = input.value.trim();
+                if (val) markManual(val);
+            });
+        }
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!container.contains(e.target)) dropdown.classList.add('hidden');
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    initTimers();
+    initManualMark();
 });
+

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartMark | Teacher Login</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/teacher_dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/student.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body class="login-page">
+
+    <div class="login-wrapper">
+
+        <!-- Left Panel – Brand -->
+        <div class="login-brand" style="background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);">
+            <div class="brand-content">
+                <div class="brand-logo">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="SmartMark Logo">
+                    <span>SmartMark</span>
+                </div>
+                <h2>Teacher Administration</h2>
+                <p>Manage attendance sessions, track student progress, and analyze classroom analytics in real-time.</p>
+                <ul class="brand-features">
+                    <li><i class="fas fa-check-circle"></i> Session Management</li>
+                    <li><i class="fas fa-check-circle"></i> Advanced Analytics</li>
+                    <li><i class="fas fa-check-circle"></i> Attendance Reports</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- Right Panel – Form -->
+        <div class="login-form-panel">
+            <div class="login-card">
+
+                <!-- Logo Header -->
+                <div class="login-header">
+                    <div class="login-logo-row">
+                        <img src="{{ url_for('static', filename='images/logo.png') }}" alt="SmartMark"
+                            class="login-logo-img">
+                        <span class="login-brand-name">SmartMark</span>
+                    </div>
+                    <h1 id="portal-title">Teacher Portal</h1>
+                    <p id="portal-desc">Sign in to your administration dashboard</p>
+                </div>
+
+                <!-- Flash Messages -->
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                <div class="alert-stack">
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">
+                        <i
+                            class="fas fa-{% if category == 'success' %}check-circle{% elif category == 'error' %}exclamation-circle{% elif category == 'warning' %}exclamation-triangle{% else %}info-circle{% endif %}"></i>
+                        {{ message }}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                {% endwith %}
+
+                <div id="login-view" style="display: {% if register %}none{% else %}block{% endif %};">
+                    <!-- Login Form -->
+                    <form method="POST" action="{{ url_for('teacher_login') }}" class="auth-form">
+                        <div class="input-group">
+                            <label for="teacher_id"><i class="fas fa-id-card"></i> Teacher ID</label>
+                            <input type="text" id="teacher_id" name="teacher_id" placeholder="e.g. T1001" required
+                                autocomplete="off">
+                        </div>
+                        <div class="input-group">
+                            <label for="email"><i class="fas fa-envelope"></i> Email Address</label>
+                            <input type="email" id="email" name="email" placeholder="sridevir@christuniversity.in"
+                                required>
+                        </div>
+                        <div class="input-group">
+                            <label for="department"><i class="fas fa-building"></i> Department</label>
+                            <input type="text" id="department" name="department" placeholder="e.g. Computer Science"
+                                required>
+                        </div>
+                        <button type="submit" class="btn-login" style="background: #1e3a8a;">
+                            <i class="fas fa-sign-in-alt"></i> Access Dashboard
+                        </button>
+                    </form>
+                    <div class="auth-toggle">
+                        <p>New teacher? <a href="javascript:void(0)" onclick="toggleAuth(true)">Register here</a></p>
+                    </div>
+                </div>
+
+                <div id="register-view" style="display: {% if register %}block{% else %}none{% endif %};">
+                    <!-- Registration Form -->
+                    <form method="POST" action="{{ url_for('teacher_register') }}" class="auth-form">
+                        <div class="input-group">
+                            <label for="reg_teacher_id"><i class="fas fa-id-card"></i> Teacher ID</label>
+                            <input type="text" id="reg_teacher_id" name="teacher_id" placeholder="e.g. T1001" required
+                                autocomplete="off">
+                        </div>
+                        <div class="input-group">
+                            <label for="reg_name"><i class="fas fa-user"></i> Full Name</label>
+                            <input type="text" id="reg_name" name="name" placeholder="e.g. Dr. R. Sridevi" required>
+                        </div>
+                        <div class="input-group">
+                            <label for="reg_email"><i class="fas fa-envelope"></i> Email Address</label>
+                            <input type="email" id="reg_email" name="email" placeholder="sridevir@christuniversity.in"
+                                required>
+                        </div>
+                        <div class="input-group">
+                            <label for="reg_department"><i class="fas fa-building"></i> Department</label>
+                            <input type="text" id="reg_department" name="department" placeholder="e.g. Computer Science"
+                                required>
+                        </div>
+                        <div class="input-group">
+                            <label for="reg_subjects"><i class="fas fa-book"></i> Subjects (comma separated)</label>
+                            <input type="text" id="reg_subjects" name="subjects" placeholder="e.g. Mathematics, Physics"
+                                required>
+                        </div>
+                        <button type="submit" class="btn-login" style="background: #10b981;">
+                            <i class="fas fa-user-plus"></i> Register
+                        </button>
+                    </form>
+                    <div class="auth-toggle">
+                        <p>Already registered? <a href="javascript:void(0)" onclick="toggleAuth(false)">Login here</a>
+                        </p>
+                    </div>
+                </div>
+
+                <div class="login-footer">
+                    <a href="{{ url_for('student_login') }}">
+                        <i class="fas fa-user-graduate"></i> Go to Student Portal
+                    </a>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function toggleAuth(isRegister) {
+            const loginView = document.getElementById('login-view');
+            const registerView = document.getElementById('register-view');
+            const title = document.getElementById('portal-title');
+            const desc = document.getElementById('portal-desc');
+
+            if (isRegister) {
+                loginView.style.display = 'none';
+                registerView.style.display = 'block';
+                title.innerText = 'Teacher Registration';
+                desc.innerText = 'Create your administration account';
+            } else {
+                loginView.style.display = 'block';
+                registerView.style.display = 'none';
+                title.innerText = 'Teacher Portal';
+                desc.innerText = 'Sign in to your administration dashboard';
+            }
+        }
+
+        // Initial setup if coming from redirect with register=True
+        {% if register %}
+        toggleAuth(true);
+        {% endif %}
+    </script>
+</body>
+
+</html>

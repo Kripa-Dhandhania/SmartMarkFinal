@@ -1,77 +1,220 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <title>Attendance Report</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/attendance_report.css') }}">
+    <meta charset="UTF-8">
+    <title>SmartMark | Attendance Report</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/teacher_dashboard.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/analytics.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 
 <body>
+    <div class="wrapper">
 
-    <h2>Attendance Report</h2>
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <a href="{{ url_for('teacher_dashboard') }}" class="logo-link">
+                    <div class="logo-section">
+                        <img src="{{ url_for('static', filename='images/logo.png') }}" class="sidebar-logo">
+                        <span class="brand-name">SmartMark</span>
+                    </div>
+                </a>
+            </div>
+            <nav class="sidebar-nav">
+                <a href="{{ url_for('teacher_dashboard') }}" class="nav-item"><i
+                        class="fas fa-home"></i><span>Dashboard</span></a>
+                <a href="{{ url_for('analytics') }}" class="nav-item"><i
+                        class="fas fa-chart-line"></i><span>Analytics</span></a>
+                <a href="{{ url_for('attendance_report') }}" class="nav-item active"><i
+                        class="fas fa-chart-bar"></i><span>Attendance Report</span></a>
+                <a href="{{ url_for('student_login') }}" class="nav-item"><i
+                        class="fas fa-user-graduate"></i><span>Student Portal</span></a>
+                <div style="flex:1;"></div>
+                <a href="{{ url_for('teacher_logout') }}" class="nav-item logout-btn"><i
+                        class="fas fa-sign-out-alt"></i><span>Logout</span></a>
+            </nav>
+        </aside>
 
+        <main class="main-content">
+            <header class="top-header">
+                <div class="header-left">
+                    <h1>Smart Attendance System | <span>Attendance Report</span></h1>
+                </div>
+                <div class="header-right">
+                    <button class="header-btn" id="theme-toggle" title="Toggle Dark Mode">
+                        <i class="fas fa-moon"></i>
+                    </button>
+                </div>
+            </header>
 
-    <div class="controls-container">
-        <form method="GET" action="{{ url_for('attendance_report') }}">
-            <label for="date">Date:</label>
-            <input type="date" id="date" name="date" value="{{ selected_date }}">
+            <div class="analytics-wrapper">
 
-            <label for="filter">Filter:</label>
-            <select id="filter" name="filter">
-                <option value="all" {% if selected_filter=='all' %}selected{% endif %}>All Slots</option>
-                {% for slot in time_slots %}
-                <option value="{{ slot }}" {% if selected_filter==slot %}selected{% endif %}>{{ slot }}</option>
-                {% endfor %}
-                <option value="skipped_rest" {% if selected_filter=='skipped_rest' %}selected{% endif %}>Skipped Morning
-                    Class (7:30-9:00)</option>
-            </select>
+                <!-- Filters -->
+                <div class="filter-card">
+                    <form method="GET" action="{{ url_for('attendance_report') }}" class="filter-form" id="reportForm">
+                        <div class="filter-group">
+                            <label for="date"><i class="fas fa-calendar"></i> Date</label>
+                            <input type="date" id="date" name="date" value="{{ selected_date }}">
+                        </div>
+                        <div class="filter-group" style="flex: 1.5;">
+                            <label for="student_id"><i class="fas fa-user"></i> Student</label>
+                            <input type="text" id="student_search" list="student_list" placeholder="Search Student..."
+                                value="{% for s in all_students %}{% if s.id == student_filter %}{{ s.name }} ({{ s.id }}){% endif %}{% endfor %}"
+                                style="width: 100%;">
+                            <input type="hidden" name="student_id" id="student_id_hidden" value="{{ student_filter }}">
+                            <datalist id="student_list">
+                                {% for s in all_students %}
+                                <option value="{{ s.name }} ({{ s.id }})" data-id="{{ s.id }}">
+                                    {% endfor %}
+                            </datalist>
+                        </div>
+                        <div class="filter-group">
+                            <label for="hour"><i class="fas fa-clock"></i> Hour</label>
+                            <select id="hour" name="hour">
+                                <option value="all" {% if hour_filter=='all' %}selected{% endif %}>All Hours</option>
+                                <option value="1" {% if hour_filter=='1' %}selected{% endif %}>Hour 1 (7:30AM-9:00AM)
+                                </option>
+                                <option value="2" {% if hour_filter=='2' %}selected{% endif %}>Hour 2 (9:45AM-10:45AM)
+                                </option>
+                                <option value="3" {% if hour_filter=='3' %}selected{% endif %}>Hour 3 (10:45AM-11:45AM)
+                                </option>
+                                <option value="4" {% if hour_filter=='4' %}selected{% endif %}>Hour 4 (11:45AM-12:45PM)
+                                </option>
+                                <option value="5" {% if hour_filter=='5' %}selected{% endif %}>Hour 5 (12:45PM-1:45PM)
+                                </option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label for="status"><i class="fas fa-filter"></i> Special Filter</label>
+                            <select id="status" name="status">
+                                <option value="" {% if not mismatch_filter %}selected{% endif %}>None</option>
+                                <option value="missed1_att2" {% if mismatch_filter=='missed1_att2' %}selected{% endif
+                                    %}>
+                                    Missed H1, Attended H2
+                                </option>
+                                <option value="att1_missed2" {% if mismatch_filter=='att1_missed2' %}selected{% endif
+                                    %}>
+                                    Attended H1, Missed H2
+                                </option>
+                            </select>
+                        </div>
 
-            <button type="submit">Apply</button>
-            <button type="button" onclick="downloadReport()"
-                style="background-color: #007bff; margin-left: 10px;">Download Excel</button>
-        </form>
+                        <div class="filter-actions">
+                            <a id="downloadExcelBtn"
+                                href="{{ url_for('download_excel') }}?date={{ selected_date }}&student_id={{ student_filter }}&hour={{ hour_filter }}&status={{ mismatch_filter }}"
+                                class="enable-btn"
+                                style="background:#16a34a;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                                <i class="fas fa-file-excel"></i> Download Excel
+                            </a>
+
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Results Table -->
+                <div class="table-card" style="margin-top:0;">
+                    <h3><i class="fas fa-table"></i> Records for {{ selected_date }}</h3>
+                    {% if records %}
+                    <table class="att-table">
+                        <thead>
+                            <tr>
+                                <th>Student ID</th>
+                                <th>Subject</th>
+                                <th>Hour</th>
+                                <th>Date</th>
+                                <th>Time</th>
+                                <th>Status</th>
+                                <th>Method</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for r in records %}
+                            <tr>
+                                <td>{{ r.student_id }}</td>
+                                <td>{{ r.subject or '—' }}</td>
+                                <td>{{ r.hour or '—' }}</td>
+                                <td>{{ r.date }}</td>
+                                <td>{{ r.marked_at[:19] if r.marked_at else '—' }}</td>
+                                <td><span class="pct-badge pct-ok">{{ r.status }}</span></td>
+                                <td>
+                                    {% if r.auth_method == 'Face' %}
+                                    <span class="method-badge face"><i class="fas fa-camera"></i> Face</span>
+                                    {% elif r.auth_method == 'Manual' %}
+                                    <span class="method-badge manual"
+                                        style="background:#3b82f6; color:#fff; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600;"><i
+                                            class="fas fa-user-edit"></i> Manual</span>
+                                    {% else %}
+                                    <span class="method-badge otp"><i class="fas fa-key"></i> OTP</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="empty-state">
+                        <i class="fas fa-clipboard-list"></i>
+                        No attendance records found for {{ selected_date }}.
+                    </div>
+                    {% endif %}
+                </div>
+
+            </div>
+        </main>
     </div>
 
+    <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
     <script>
-        function downloadReport() {
-            const date = document.getElementById('date').value;
-            const filter = document.getElementById('filter').value;
-            window.location.href = `{{ url_for('download_report') }}?date=${date}&filter=${filter}`;
+        const reportForm = document.getElementById('reportForm');
+        const dlBtn = document.getElementById('downloadExcelBtn');
+
+        const dateInput = document.getElementById('date');
+        const hourSelect = document.getElementById('hour');
+        const statusSelect = document.getElementById('status');
+        const studentSearch = document.getElementById('student_search');
+        const studentIdHidden = document.getElementById('student_id_hidden');
+        const studentList = document.getElementById('student_list');
+
+        function refreshDownloadLink() {
+            const sid = studentIdHidden.value;
+            const h = hourSelect.value;
+            const s = statusSelect.value;
+            const d = dateInput.value;
+            dlBtn.href = `/download-excel?date=${d}&student_id=${sid}&hour=${h}&status=${s}`;
         }
+
+        function handleFilterChange() {
+            refreshDownloadLink();
+            reportForm.submit();
+        }
+
+        // Handle student search datalist selection
+        studentSearch.addEventListener('input', function () {
+            const val = this.value;
+            const options = studentList.options;
+            let found = false;
+            for (let i = 0; i < options.length; i++) {
+                if (options[i].value === val) {
+                    studentIdHidden.value = options[i].dataset.id;
+                    found = true;
+                    handleFilterChange();
+                    break;
+                }
+            }
+            if (!val) {
+                studentIdHidden.value = "";
+                handleFilterChange();
+            }
+        });
+
+        [dateInput, hourSelect, statusSelect].forEach(el => {
+            el.addEventListener('change', handleFilterChange);
+        });
+
+        refreshDownloadLink();
     </script>
 
-    <div class="table-container">
-        <table id="attendanceTable" class="excel-sheet">
-            <thead>
-                <tr>
-                    <th>Student ID</th>
-                    <th>Name</th>
-                    {% for slot in visible_slots %}
-                    <th>{{ slot }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for student in students %}
-                <tr>
-                    <td>{{ student.id }}</td>
-                    <td>{{ student.name }}</td>
-                    {% for slot in visible_slots %}
-                    <td class="status-{{ student.attendance[slot]|lower }}">{{ student.attendance[slot] }}</td>
-                    {% endfor %}
-                </tr>
-                {% else %}
-                <tr>
-                    <td colspan="{{ visible_slots|length + 2 }}" style="text-align: center;">No data found matching
-                        criteria.</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-
-
-    <script src="{{ url_for('static', filename='js/attendance_report.js') }}"></script>
 </body>
 
 </html>

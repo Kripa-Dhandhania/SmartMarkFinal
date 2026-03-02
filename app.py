@@ -159,7 +159,8 @@ def teacher_register():
             flash("Teacher ID, Name, Email, and Password are required.", "error")
             return redirect(url_for("teacher_register"))
 
-        if get_teacher(teacher_id):
+        teacher = get_teacher(teacher_id)
+        if teacher and teacher.get('password_hash'):
             flash("Teacher ID already registered. Please login.", "warning")
             return redirect(url_for("teacher_login"))
 

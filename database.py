@@ -6,6 +6,7 @@ Handles SQLite operations for students, attendance sessions, attendance records,
 import sqlite3
 from datetime import date, datetime
 from contextlib import contextmanager
+from werkzeug.security import generate_password_hash
 
 import os
 DATABASE_NAME = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'attendance.db')
@@ -200,12 +201,18 @@ def init_db():
         ]
         
         for tid, tname, temail, tdept in teachers_to_seed:
-            cursor.execute("SELECT id FROM teachers WHERE id = ?", (tid,))
-            if not cursor.fetchone():
+            cursor.execute("SELECT id, password_hash FROM teachers WHERE id = ?", (tid,))
+            existing = cursor.fetchone()
+            if not existing:
+                # Default password is "teacher@123" for quick setup
+                phash = generate_password_hash("teacher@123")
                 cursor.execute(
-                    'INSERT INTO teachers (id, name, email, department) VALUES (?, ?, ?, ?)',
-                    (tid, tname, temail, tdept)
+                    'INSERT INTO teachers (id, name, email, department, password_hash) VALUES (?, ?, ?, ?, ?)',
+                    (tid, tname, temail, tdept, phash)
                 )
+            elif not existing['password_hash']:
+                phash = generate_password_hash("teacher@123")
+                cursor.execute('UPDATE teachers SET password_hash = ? WHERE id = ?', (phash, tid))
 
         # Seed subjects for teachers
         subjects_to_seed = [

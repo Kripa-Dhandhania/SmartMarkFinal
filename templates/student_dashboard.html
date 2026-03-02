@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
+    <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 
 <body>
@@ -102,8 +103,12 @@
                             <form method="POST" action="{{ url_for('enroll_face') }}" style="margin:0;">
                                 <button type="submit" class="btn-enroll">
                                     <i class="fas fa-camera"></i>
-                                    {% if face_enrolled %}Re-enroll Face{% else %}Enroll My Face{% endif %}
+                                    {% if face_enrolled %}Add More Face Scans{% else %}Enroll My Face{% endif %}
                                 </button>
+                                <p style="font-size:11px; color:#6b7280; margin-top:10px; line-height:1.4;">
+                                    <i class="fas fa-info-circle"></i> <strong>Tip:</strong> Scan 3-5 times from
+                                    different angles for best accuracy.
+                                </p>
                             </form>
                         </div>
 
@@ -127,27 +132,77 @@
                             {% if sessions %}
                             <div class="sessions-list">
                                 {% for s in sessions %}
-                                <div class="session-item {% if s.already_marked %}marked{% endif %}"
-                                    data-lat="{{ s.latitude or 0 }}" data-lon="{{ s.longitude or 0 }}">
+                                <div class="session-item {% if s.already_marked %}marked{% endif %} {% if not s.is_active %}inactive{% endif %}"
+                                    data-id="{{ s.id }}" data-lat="{{ s.latitude or 0 }}"
+                                    data-lon="{{ s.longitude or 0 }}" {% if not s.is_active
+                                    %}style="opacity: 0.8; border-color: #d1d5db; background: #f9fafb;" {% endif %}>
                                     <div class="session-item-info">
                                         <div class="session-subject">{{ s.subject }}</div>
                                         <div class="session-meta">
                                             <i class="fas fa-clock"></i> Hour {{ s.hour }}
                                             &nbsp;&middot;&nbsp;
                                             <i class="fas fa-calendar-day"></i> {{ s.date }}
+                                            {% if not s.is_active %}
+                                            &nbsp;&middot;&nbsp;
+                                            <span style="color:#ef4444; font-weight:700;">CLOSED</span>
+                                            {% endif %}
                                         </div>
                                     </div>
                                     {% if s.already_marked %}
-                                    <button class="btn-marked" disabled><i class="fas fa-check"></i> Marked</button>
+                                    {% if s.status == 'Pending Verification' %}
+                                    <button class="btn-marked" disabled
+                                        style="background:#fef3c7; color:#d97706; border-color:#fde68a;">
+                                        <i class="fas fa-clock"></i> Pending Approval
+                                    </button>
                                     {% else %}
-                                    <form method="POST" action="{{ url_for('mark_attendance_route', session_id=s.id) }}"
-                                        style="margin:0;" class="attendance-form">
-                                        <input type="hidden" name="latitude" class="lat-input">
-                                        <input type="hidden" name="longitude" class="lon-input">
-                                        <button type="submit" class="btn-mark-att">
-                                            <i class="fas fa-fingerprint"></i> Mark Attendance
-                                        </button>
-                                    </form>
+                                    <button class="btn-marked" disabled><i class="fas fa-check"></i> Marked</button>
+                                    {% endif %}
+                                    {% else %}
+                                    <div style="display:flex; flex-direction:column; gap:6px;">
+                                        <form method="POST"
+                                            action="{{ url_for('mark_attendance_route', session_id=s.id) }}"
+                                            style="margin:0;" class="attendance-form">
+                                            <input type="hidden" name="latitude" class="lat-input">
+                                            <input type="hidden" name="longitude" class="lon-input">
+
+                                            <div class="attendance-action"
+                                                style="margin-top:15px; display:flex; flex-direction:column; gap:8px;">
+                                                <!-- Hidden Token for Final Submit -->
+                                                <input type="hidden" name="qr_token" class="qr-token-input">
+
+                                                <!-- Step 2: Mark Attendance (Face Scan) - Shown only after QR Success -->
+                                                <button type="submit" class="btn-mark-att hidden" disabled
+                                                    style="width: 100%; background: #94a3b8; color: white; padding: 12px; border-radius: 20px; font-weight: 700; border: none; cursor: not-allowed; display: flex; align-items:center; justify-content:center; gap:8px; transition: all 0.3s;">
+                                                    <i class="fas fa-camera"></i> Step 2: Mark Attendance (Face Scan)
+                                                </button>
+
+                                                <!-- Step 1: Mandatory QR Scan -->
+                                                <button type="button" class="btn-scan-qr" disabled
+                                                    data-session-id="{{ s.id }}"
+                                                    style="width: 100%; background: #94a3b8; color: white; padding: 12px; border-radius: 20px; font-weight: 700; border: none; cursor: not-allowed; display: flex; align-items:center; justify-content:center; gap:8px; transition: all 0.3s; font-size: 13px;">
+                                                    <i class="fas fa-satellite-dish"></i> Checking Proximity...
+                                                </button>
+
+                                                <!-- Step 1 Success Badge -->
+                                                <div class="qr-success-badge hidden"
+                                                    style="text-align:center; color:#16a34a; font-size:12px; font-weight:700; background:#f0fdf4; padding:6px; border-radius:12px; border:1px solid #bbf7d0; margin-bottom:5px;">
+                                                    <i class="fas fa-check-circle"></i> QR Verified! Proceed to Step 2.
+                                                </div>
+                                            </div>
+                                        </form>
+
+                                        <!-- Fallback for Manual Verification -->
+                                        <div class="manual-fallback-area" style="margin-top:5px;">
+                                            <form method="POST"
+                                                action="{{ url_for('student_request_verification', session_id=s.id) }}"
+                                                style="margin:0;">
+                                                <button type="submit" class="btn-request-manual"
+                                                    style="width:100%; background:#fffbeb; color:#92400e; border:1px solid #fcd34d; padding:8px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:8px;">
+                                                    <i class="fas fa-user-shield"></i> Manual Verification Fallback
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </div>
                                     {% endif %}
                                 </div>
                                 {% endfor %}
@@ -161,23 +216,17 @@
                             {% endif %}
                         </div>
 
-                        <!-- How It Works -->
                         <div class="sd-card how-it-works">
                             <div class="sd-section-title">How It Works</div>
                             <ul>
-                                <li><i class="fas fa-camera"></i> Enroll your face once <strong style="color:#111;">—
-                                        one-time setup</strong></li>
+                                <li><i class="fas fa-camera"></i> Enroll your face once — <strong
+                                        style="color:#111;">one-time setup</strong></li>
                                 <li><i class="fas fa-bolt"></i> Teacher enables a session for your class</li>
-                                <li><i class="fas fa-fingerprint"></i> Click <strong style="color:#111;">Mark
-                                        Attendance</strong> above</li>
-                                <li><i class="fas fa-check-circle" style="color:#22c55e;"></i> Face match → attendance
-                                    recorded instantly</li>
-                                <li><i class="fas fa-key" style="color:#d97706;"></i> No match → OTP sent to your email
+                                <li><i class="fas fa-map-marker-alt" style="color:#3b82f6;"></i> Proximity is verified
+                                    <strong style="color:#111;">automatically</strong> in the background
                                 </li>
-                                <li><i class="fas fa-map-marker-alt" style="color:#ef4444;"></i> <strong
-                                        style="color:#111;">Strict Range Check:</strong> You must be within **50m** of
-                                    the
-                                    teacher's current location</li>
+                                <li><i class="fas fa-fingerprint"></i> Click <strong style="color:#111;">Mark
+                                        Attendance</strong> once enabled</li>
                             </ul>
                         </div>
 
@@ -227,6 +276,10 @@
                                         <td>
                                             {% if r.auth_method == 'Face' %}
                                             <span class="badge-face"><i class="fas fa-camera"></i> Face</span>
+                                            {% elif r.auth_method == 'Location' %}
+                                            <span class="badge-location"
+                                                style="background:#e0f2fe; color:#0369a1; padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600;"><i
+                                                    class="fas fa-map-marker-alt"></i> Location</span>
                                             {% else %}
                                             <span class="badge-otp"><i class="fas fa-key"></i> OTP</span>
                                             {% endif %}
@@ -252,12 +305,46 @@
 
     </div><!-- end sd-wrapper -->
 
+    <!-- Dynamic QR Scanner Modal -->
+    <div id="sd-qr-modal" class="sd-modal hidden"
+        style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:2000; display:none; flex-direction:column; align-items:center; justify-content:center; padding:20px;">
+        <div class="sd-modal-content"
+            style="background:#fff; width:100%; max-width:500px; border-radius:24px; padding:25px; text-align:center; position:relative;">
+            <button id="close-sd-qr-modal"
+                style="position:absolute; top:15px; right:15px; background:#f1f5f9; border:none; width:36px; height:36px; border-radius:50%; font-size:18px; cursor:pointer; color:#64748b; display:flex; align-items:center; justify-content:center;">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <h2 style="color:#1e293b; font-size:20px; margin-bottom:10px;">Scan Teacher's QR</h2>
+            <p style="color:#64748b; font-size:14px; margin-bottom:20px;">Point your camera at the teacher's dashboard
+            </p>
+
+            <div id="qr-reader"
+                style="width:100%; border-radius:16px; overflow:hidden; border:2px solid #e2e8f0; background:#000;">
+            </div>
+
+            <div id="qr-status"
+                style="margin-top:20px; padding:10px; border-radius:10px; font-size:13px; font-weight:600; display:none;">
+            </div>
+
+            <p style="margin-top:20px; font-size:12px; color:#94a3b8;">
+                <i class="fas fa-info-circle"></i> To prevent proxy attendance, gallery uploads are disabled.
+            </p>
+        </div>
+    </div>
+
+    <style>
+        /* #qr-scanner-modal:not(.hidden) {
+            display: flex !important;
+        } */
+    </style>
+
     <script>
         const GLOBAL_LAT = parseFloat("{{ classroom_lat or 0 }}");
         const GLOBAL_LON = parseFloat("{{ classroom_lon or 0 }}");
-        const CLASSROOM_RADIUS = 50.0; // Strict 50m radius
+        const CLASSROOM_RADIUS = 20.0; // Updated to 20m for stricter proxy prevention
 
-
+        // ... existing calculateDistance function ...
         function calculateDistance(lat1, lon1, lat2, lon2) {
             const R = 6371000; // Radius of earth in meters
             const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -270,102 +357,141 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
+            // const scannerModal = document.getElementById('qr-scanner-modal'); // Removed
+            // const closeScanner = document.getElementById('close-scanner'); // Removed
+            // let html5QrCode = null; // Removed
+
+            // BLE + OTP Logic Removed
+            // Step 1/2 manual logic removed - now automatic below in watchPosition
+
             const distanceMeter = document.getElementById('distance-meter');
             const distanceVal = document.getElementById('distance-val');
             let lastKnownPos = null;
 
-            // Continuous location tracking for the meter (checks against the first session if available)
             if (navigator.geolocation) {
                 distanceMeter.classList.remove('hidden');
                 navigator.geolocation.watchPosition((pos) => {
                     lastKnownPos = pos;
-                    let targetLat = GLOBAL_LAT;
-                    let targetLon = GLOBAL_LON;
+                    const lat = pos.coords.latitude;
+                    const lon = pos.coords.longitude;
 
-                    const firstSession = document.querySelector('.session-item');
-                    if (firstSession) {
-                        targetLat = parseFloat(firstSession.dataset.lat) || GLOBAL_LAT;
-                        targetLon = parseFloat(firstSession.dataset.lon) || GLOBAL_LON;
-                    }
+                    // Update all active attendance buttons
+                    document.querySelectorAll('.attendance-form').forEach(form => {
+                        const sessionItem = form.closest('.session-item');
+                        const btn = form.querySelector('.btn-mark-att');
+                        if (!sessionItem || !btn) return;
 
-                    const dist = calculateDistance(pos.coords.latitude, pos.coords.longitude, targetLat, targetLon);
-                    distanceVal.innerText = dist.toFixed(1) + 'm away';
+                        const targetLat = parseFloat(sessionItem.dataset.lat) || GLOBAL_LAT;
+                        const targetLon = parseFloat(sessionItem.dataset.lon) || GLOBAL_LON;
+                        const dist = calculateDistance(lat, lon, targetLat, targetLon);
 
-                    if (dist <= CLASSROOM_RADIUS) {
-                        distanceMeter.style.background = '#f0fdf4';
-                        distanceMeter.style.color = '#16a34a';
-                        distanceMeter.style.borderColor = '#bbf7d0';
-                    } else {
-                        distanceMeter.style.background = '#fef2f2';
-                        distanceMeter.style.color = '#dc2626';
-                        distanceMeter.style.borderColor = '#fecaca';
-                    }
-                }, () => { }, { enableHighAccuracy: true });
-            }
+                        // Update global distance meter UI (using first session for label)
+                        if (sessionItem === document.querySelector('.session-item')) {
+                            distanceVal.innerText = dist.toFixed(1) + 'm away';
+                            distanceMeter.style.background = dist <= CLASSROOM_RADIUS ? '#f0fdf4' : '#fef2f2';
+                            distanceMeter.style.color = dist <= CLASSROOM_RADIUS ? '#16a34a' : '#dc2626';
+                            distanceMeter.style.borderColor = dist <= CLASSROOM_RADIUS ? '#bbf7d0' : '#fecaca';
+                        }
 
-            const forms = document.querySelectorAll('.attendance-form');
-            forms.forEach(form => {
-                form.addEventListener('submit', function (e) {
-                    e.preventDefault();
-                    const btn = form.querySelector('.btn-mark-att');
-                    const originalHtml = btn.innerHTML;
-
-                    btn.disabled = true;
-                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Initializing...';
-
-                    // Layered feedback flow
-                    setTimeout(() => { btn.innerHTML = '<i class="fas fa-satellite"></i> Fetching Geo-Fence...'; }, 800);
-
-                    navigator.geolocation.getCurrentPosition(
-                        (position) => {
-                            const lat = position.coords.latitude;
-                            const lon = position.coords.longitude;
-                            // Identify target location: prefer session-specific coordinates if available
-                            const sessionItem = form.closest('.session-item');
-                            const targetLat = parseFloat(sessionItem.dataset.lat) || GLOBAL_LAT;
-                            const targetLon = parseFloat(sessionItem.dataset.lon) || GLOBAL_LON;
-
-                            const dist = calculateDistance(lat, lon, targetLat, targetLon);
-
-                            if (dist > CLASSROOM_RADIUS) {
-                                alert(`Out of range! You are ${dist.toFixed(1)}m away from the classroom. Required: ${CLASSROOM_RADIUS}m.`);
-                                btn.disabled = false;
-                                btn.innerHTML = originalHtml;
-                                return;
-                            }
-
+                        // Auto-enable Step 1 (QR Scan)
+                        if (dist <= CLASSROOM_RADIUS) {
                             form.querySelector('.lat-input').value = lat;
                             form.querySelector('.lon-input').value = lon;
 
-                            setTimeout(() => {
-                                btn.innerHTML = '<i class="fas fa-camera"></i> Scanning Face Ready...';
-                                setTimeout(() => { form.submit(); }, 500);
-                            }, 1000);
-                        },
-                        (error) => {
-                            if (lastKnownPos && (new Date().getTime() - lastKnownPos.timestamp < 15000)) {
-                                const lat = lastKnownPos.coords.latitude;
-                                const lon = lastKnownPos.coords.longitude;
-                                const sessionItem = form.closest('.session-item');
-                                const targetLat = parseFloat(sessionItem.dataset.lat) || GLOBAL_LAT;
-                                const targetLon = parseFloat(sessionItem.dataset.lon) || GLOBAL_LON;
-                                const dist = calculateDistance(lat, lon, targetLat, targetLon);
-
-                                if (dist <= CLASSROOM_RADIUS) {
-                                    form.querySelector('.lat-input').value = lat;
-                                    form.querySelector('.lon-input').value = lon;
-                                    btn.innerHTML = '<i class="fas fa-camera"></i> Scanning Face Ready...';
-                                    setTimeout(() => { form.submit(); }, 500);
-                                    return;
-                                }
+                            const scanBtn = form.querySelector('.btn-scan-qr');
+                            if (scanBtn && !scanBtn.dataset.qrVerified) {
+                                scanBtn.disabled = false;
+                                scanBtn.style.background = '#1e293b';
+                                scanBtn.style.cursor = 'pointer';
+                                scanBtn.innerHTML = '<i class="fas fa-qrcode"></i> Step 1: Scan Teacher\'s QR';
+                                scanBtn.classList.remove('hidden');
                             }
-                            alert("Geolocation Error: " + error.message);
-                            btn.disabled = false;
-                            btn.innerHTML = originalHtml;
-                        },
-                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
-                    );
+                        } else {
+                            const scanBtn = form.querySelector('.btn-scan-qr');
+                            if (scanBtn) {
+                                scanBtn.disabled = true;
+                                scanBtn.style.background = '#94a3b8';
+                                scanBtn.style.cursor = 'not-allowed';
+                                scanBtn.innerHTML = '<i class="fas fa-satellite-dish"></i> Please enter classroom';
+                            }
+                            // Also hide Step 2 if out of range
+                            form.querySelector('.btn-mark-att').classList.add('hidden');
+                        }
+                    });
+                }, (err) => {
+                    console.error("Geo Error", err);
+                    document.querySelectorAll('.btn-scan-qr').forEach(btn => {
+                        btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Enable Location';
+                    });
+                }, { enableHighAccuracy: false, timeout: 30000, maximumAge: 60000 });
+            }
+
+            // ── QR Scanner Logic ───────────────────────────────────────────────
+            let html5QrCode = null;
+            let currentScanningForm = null;
+
+            document.querySelectorAll('.btn-scan-qr').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    currentScanningForm = btn.closest('.attendance-form');
+                    const modal = document.getElementById('sd-qr-modal');
+                    modal.style.display = 'flex';
+                    modal.classList.remove('hidden');
+
+                    const status = document.getElementById('qr-status');
+                    status.style.display = 'none';
+
+                    html5QrCode = new Html5Qrcode("qr-reader");
+                    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+
+                    html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
+                        // QR Scanned! Now verify it without marking yet
+                        status.style.display = 'block';
+                        status.style.background = '#f0fdf4';
+                        status.style.color = '#16a34a';
+                        status.innerText = "Verifying QR...";
+
+                        const fd = new FormData();
+                        fd.append('session_id', btn.dataset.sessionId);
+                        fd.append('token', decodedText);
+
+                        fetch('/student/verify-qr-only', { method: 'POST', body: fd })
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data.success) {
+                                    html5QrCode.stop().then(() => {
+                                        modal.style.display = 'none';
+
+                                        // Update UI for the specific session
+                                        const scanBtn = currentScanningForm.querySelector('.btn-scan-qr');
+                                        const faceBtn = currentScanningForm.querySelector('.btn-mark-att');
+                                        const badge = currentScanningForm.querySelector('.qr-success-badge');
+                                        const tokenInput = currentScanningForm.querySelector('.qr-token-input');
+
+                                        tokenInput.value = decodedText;
+                                        scanBtn.classList.add('hidden');
+                                        scanBtn.dataset.qrVerified = "true";
+
+                                        badge.classList.remove('hidden');
+
+                                        faceBtn.classList.remove('hidden');
+                                        faceBtn.disabled = false;
+                                        faceBtn.style.background = '#1e293b';
+                                        faceBtn.style.cursor = 'pointer';
+                                    });
+                                } else {
+                                    status.style.background = '#fef2f2';
+                                    status.style.color = '#dc2626';
+                                    status.innerText = data.message;
+                                }
+                            });
+                    });
                 });
+            });
+
+            document.getElementById('close-sd-qr-modal')?.addEventListener('click', () => {
+                const modal = document.getElementById('sd-qr-modal');
+                modal.style.display = 'none';
+                if (html5QrCode && html5QrCode.isScanning) html5QrCode.stop();
             });
         });
     </script>

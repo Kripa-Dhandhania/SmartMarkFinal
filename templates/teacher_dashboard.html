@@ -6,6 +6,7 @@
     <title>SmartMark | Teacher Dashboard</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/teacher_dashboard.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 
 <body>
@@ -141,6 +142,14 @@
                                 </div>
                                 <div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;">
                                     <div style="display:flex;align-items:center;gap:10px;">
+                                        <!-- QR Fallback Button -->
+                                        <button class="qr-display-btn" data-session-id="{{ s.id }}"
+                                            data-subject="{{ s.subject }}" title="Display Dynamic QR Code Fallback"
+                                            style="background:var(--accent-blue); border:none; color:white; 
+                                                       padding:4px 12px; border-radius:20px; font-size:12px; cursor:pointer; font-weight:600;">
+                                            <i class="fas fa-qrcode"></i> Display QR
+                                        </button>
+
                                         <!-- Manual override button -->
                                         <button class="manual-mark-btn" data-session-id="{{ s.id }}"
                                             title="Manually mark student present"
@@ -207,8 +216,9 @@
 
                 </div>
 
-                <!-- RIGHT -->
+                <!-- RIGHT SECTION -->
                 <aside class="right-section">
+                    <!-- Quick Stats Card -->
                     <div class="stats-card">
                         <h3>Quick Stats</h3>
 
@@ -245,29 +255,108 @@
                         </div>
 
                         <div class="stat-item">
-                            <label>OTP Verified</label>
-                            <div class="stat-value" style="color:#f59e0b;">{{ stats.otp_count }}</div>
-                        </div>
-
-                        <div class="stat-item">
                             <label>Avg Confidence</label>
                             <div class="stat-value percentage">{{ stats.avg_confidence }}</div>
                         </div>
 
-                        <a href="{{ url_for('analytics') }}" class="analytics-link">
+                        <a href="{{ url_for('analytics') }}" class="analytics-link"
+                            style="display:block; margin-top:15px; text-decoration:none; color:#6366f1; font-weight:600; font-size:13px;">
                             <i class="fas fa-chart-line"></i> View Full Analytics
                         </a>
                     </div>
+
+                    <!-- Verification Queue Card -->
+                    <div class="stats-card verification-queue-card"
+                        style="margin-top:20px; border-color:#f59e0b; background:#fffcf0; padding: 20px; border-radius: 16px; border: 1px solid #fde68a; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);">
+                        <h3 style="color:#d97706; margin-top:0; display:flex; align-items:center; gap:8px;"><i
+                                class="fas fa-user-check"></i> Verification Queue</h3>
+                        <p style="font-size:11px; color:#92400e; margin-bottom:15px; line-height:1.4;">
+                            Students requesting manual verification. Confirm they are present before approving.
+                        </p>
+
+                        {% if pending_verifications %}
+                        <div class="pending-list" style="display:flex; flex-direction:column; gap:12px;">
+                            {% for pv in pending_verifications %}
+                            <div class="pending-item"
+                                style="background:#fff; border:1px solid #fde68a; border-radius:12px; padding:12px; box-shadow:0 2px 4px rgba(0,0,0,0.02);">
+                                <div style="font-weight:700; font-size:13px; color:#1f2937;">{{ pv.student_name }}</div>
+                                <div style="font-size:11px; color:#6b7280; margin-bottom:8px;">
+                                    ID: {{ pv.student_id }} &middot; {{ pv.subject }} (Hr {{ pv.hour }})
+                                </div>
+
+                                <div style="display:flex; gap:8px;">
+                                    <form method="POST"
+                                        action="{{ url_for('teacher_approve_verification', attendance_id=pv.attendance_id) }}"
+                                        style="flex:1;">
+                                        <button type="submit" class="verify-btn"
+                                            style="width:100%; padding:8px; border-radius:8px; background:#10b981; color:white; border:none; font-size:11px; font-weight:600; cursor:pointer; transition:all 0.2s;">
+                                            Approve
+                                        </button>
+                                    </form>
+                                    <form method="POST"
+                                        action="{{ url_for('teacher_reject_verification', attendance_id=pv.attendance_id) }}"
+                                        style="flex:1;">
+                                        <button type="submit" class="reject-btn"
+                                            style="width:100%; padding:8px; border-radius:8px; background:#ef4444; color:white; border:none; font-size:11px; font-weight:600; cursor:pointer; transition:all 0.2s;">
+                                            Reject
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% else %}
+                        <div
+                            style="text-align:center; padding:30px 0; color:#9ca3af; background: rgba(255,255,255,0.5); border-radius: 12px; border: 1px dashed #fcd34d;">
+                            <i class="fas fa-user-clock" style="font-size:24px; margin-bottom:10px; opacity: 0.5;"></i>
+                            <p style="font-size:12px; margin:0;">Queue is empty</p>
+                        </div>
+                        {% endif %}
+                    </div>
                 </aside>
 
-            </div>
+            </div> <!-- End content-wrapper -->
         </main>
+    </div> <!-- End wrapper -->
+
+    <!-- Dynamic QR Modal -->
+    <div id="qr-modal" class="modal hidden"
+        style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:1000; display:none; align-items:center; justify-content:center;">
+        <div class="modal-content"
+            style="background:white; border-radius:20px; padding:30px; text-align:center; max-width:400px; width:90%; position:relative;">
+            <button id="close-qr-modal"
+                style="position:absolute; top:15px; right:15px; background:none; border:none; font-size:24px; cursor:pointer; color:#64748b;">
+                <i class="fas fa-times"></i>
+            </button>
+            <h2 id="qr-modal-title" style="margin:0 0 10px; color:#1e3a8a; font-size:20px;">Attendance QR Code</h2>
+            <p id="qr-modal-subtitle" style="margin:0 0 20px; color:#64748b; font-size:14px;">Regenerates every 10
+                seconds</p>
+
+            <div id="qrcode-container"
+                style="display:inline-block; padding:20px; background:#f8fafc; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:20px;">
+                <!-- QR will be injected here -->
+            </div>
+
+            <div
+                style="display:flex; align-items:center; justify-content:center; gap:10px; color:#dc2626; font-weight:700; font-size:13px;">
+                <i class="fas fa-sync-alt fa-spin"></i>
+                <span>Refreshing in <span id="qr-countdown">10</span>s</span>
+            </div>
+
+            <p style="margin:20px 0 0; font-size:12px; color:#94a3b8; line-height:1.4;">
+                <i class="fas fa-info-circle"></i> Students must scan this directly from their phones.
+            </p>
+        </div>
     </div>
+
+    <!-- QR Modal Removed -->
 
     <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
     <script src="{{ url_for('static', filename='js/teacher_dashboard.js') }}"></script>
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            // QR Script Removed
+
             const enableForms = document.querySelectorAll('form[action="{{ url_for("teacher_create_session") }}"]');
 
             enableForms.forEach(form => {

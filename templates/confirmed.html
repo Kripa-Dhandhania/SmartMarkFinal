@@ -56,9 +56,12 @@
                 {% endif %}
                 <div class="confirmed-row">
                     <span class="confirmed-label"><i class="fas fa-shield-alt"></i> Verification</span>
-                    <span class="confirmed-value method-val {% if auth_method == 'Face' %}face{% else %}otp{% endif %}">
+                    <span
+                        class="confirmed-value method-val {% if auth_method == 'Face' %}face{% elif auth_method == 'Location' %}location{% else %}otp{% endif %}">
                         {% if auth_method == 'Face' %}
                         <i class="fas fa-camera"></i> Face Recognition
+                        {% elif auth_method == 'Location' %}
+                        <i class="fas fa-map-marker-alt"></i> Location Verified
                         {% else %}
                         <i class="fas fa-key"></i> OTP Verification
                         {% endif %}

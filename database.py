@@ -7,7 +7,8 @@ import sqlite3
 from datetime import date, datetime
 from contextlib import contextmanager
 
-DATABASE_NAME = 'attendance.db'
+import os
+DATABASE_NAME = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'attendance.db')
 
 
 @contextmanager
@@ -32,7 +33,8 @@ def init_db():
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 email TEXT DEFAULT '',
-                department TEXT DEFAULT ''
+                department TEXT DEFAULT '',
+                password_hash TEXT
             )
         ''')
         
@@ -43,6 +45,7 @@ def init_db():
                 name TEXT NOT NULL,
                 email TEXT DEFAULT '',
                 enrolled INTEGER DEFAULT 1,
+                password_hash TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -62,6 +65,7 @@ def init_db():
                 date TEXT NOT NULL,
                 teacher_id TEXT,
                 ttl INTEGER DEFAULT 5,
+                session_otp TEXT,
                 is_active INTEGER DEFAULT 1,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (teacher_id) REFERENCES teachers(id)
@@ -142,22 +146,27 @@ def init_db():
             except sqlite3.OperationalError:
                 pass  # Column already exists
         
-        # Migration: add confidence_score column if it doesn't exist
+        # Migration: add password_hash columns
         try:
-            cursor.execute("ALTER TABLE attendance ADD COLUMN confidence_score REAL")
+            cursor.execute("ALTER TABLE teachers ADD COLUMN password_hash TEXT")
         except sqlite3.OperationalError:
-            pass  # Column already exists
-        
-        # Create teacher_subjects table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS teacher_subjects (
-                teacher_id TEXT NOT NULL,
-                subject_name TEXT NOT NULL,
-                class_info TEXT DEFAULT '',
-                PRIMARY KEY (teacher_id, subject_name),
-                FOREIGN KEY (teacher_id) REFERENCES teachers(id)
-            )
-        ''')
+            pass
+        try:
+            cursor.execute("ALTER TABLE students ADD COLUMN password_hash TEXT")
+        except sqlite3.OperationalError:
+            pass
+            
+        # Migration: add session_otp column
+        try:
+            cursor.execute("ALTER TABLE attendance_sessions ADD COLUMN session_otp TEXT")
+        except sqlite3.OperationalError:
+            pass
+
+        # Migration: add ble_uuid column
+        try:
+            cursor.execute("ALTER TABLE attendance_sessions ADD COLUMN ble_uuid TEXT")
+        except sqlite3.OperationalError:
+            pass
 
         # ── Seed Official Records ──────────────────────────────────────────────
         teachers_to_seed = [
@@ -239,6 +248,27 @@ def get_or_create_student(student_id, email=''):
     return student
 
 
+def get_student_by_id(student_id):
+    """Get student by ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM students WHERE id = ?', (student_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def update_student_password(student_id, password_hash):
+    """Update a student's password hash."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE students SET password_hash = ? WHERE id = ?',
+            (password_hash, student_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def get_student_email(student_id):
     """Get student's email from database."""
     student = get_student(student_id)
@@ -317,6 +347,27 @@ def get_or_create_teacher(teacher_id, email='', name='', department=''):
     return teacher
 
 
+def get_teacher_by_id(teacher_id):
+    """Get teacher by ID."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM teachers WHERE id = ?', (teacher_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def update_teacher_password(teacher_id, password_hash):
+    """Update a teacher's password hash."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            'UPDATE teachers SET password_hash = ? WHERE id = ?',
+            (password_hash, teacher_id)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
 def get_teacher_subjects(teacher_id):
     """Get subjects assigned to a teacher."""
     with get_connection() as conn:
@@ -346,32 +397,25 @@ def add_teacher_subject(teacher_id, subject_name, class_info=''):
 
 # ============== SESSION FUNCTIONS ==============
 
-def create_session(subject, hour, teacher_id=None, ttl_minutes=5, lat=None, lon=None):
-    """
-    Create a new attendance session (teacher enables attendance for a class).
+def create_session(subject, hour, teacher_id, ttl_minutes=5, lat=None, lon=None):
+    """Start a new attendance session with optional geolocation, BLE UUID, and custom TTL."""
+    import uuid
+    import random
+    import string
+    from datetime import date
     
-    Args:
-        subject: Subject name (e.g. "Mathematics")
-        hour: Period/hour number (e.g. 1, 2, 3)
-        teacher_id: ID of the teacher creating the session
-        ttl_minutes: How long the session stays active
-        lat: Latitude of the classroom
-        lon: Longitude of the classroom
+    ble_uuid = str(uuid.uuid4())
+    session_otp = ''.join(random.choices(string.digits, k=6))
     
-    Returns:
-        session_id if created, None on failure
-    """
-    today = date.today().isoformat()
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            '''INSERT INTO attendance_sessions (subject, hour, date, teacher_id, ttl, latitude, longitude, is_active) 
-               VALUES (?, ?, ?, ?, ?, ?, ?, 1)''',
-            (subject, hour, today, teacher_id, ttl_minutes, lat, lon)
+            'INSERT INTO attendance_sessions (subject, hour, date, teacher_id, ttl, latitude, longitude, ble_uuid, session_otp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            (subject, hour, date.today().isoformat(), teacher_id, ttl_minutes, lat, lon, ble_uuid, session_otp)
         )
         conn.commit()
         session_id = cursor.lastrowid
-        print(f"[DB] Session created: {subject} - Hour {hour} by {teacher_id} (ID: {session_id}, TTL: {ttl_minutes}, Loc: {lat}, {lon})")
+        print(f"[DB] Session created: {subject} - Hour {hour} by {teacher_id} (ID: {session_id}, OTP: {session_otp}, TTL: {ttl_minutes}m)")
         return session_id
 
 
@@ -462,28 +506,20 @@ def get_session(session_id):
 # ============== ATTENDANCE FUNCTIONS ==============
 
 def check_attendance_for_session(student_id, session_id):
-    """Check if student already marked attendance for a specific session."""
+    """Check if student already marked attendance for a specific session. Returns status string or None."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            'SELECT 1 FROM attendance WHERE student_id = ? AND session_id = ?',
+            'SELECT status FROM attendance WHERE student_id = ? AND session_id = ?',
             (student_id, session_id)
         )
-        return cursor.fetchone() is not None
+        result = cursor.fetchone()
+        return result[0] if result else None
 
 
-def mark_attendance(student_id, session_id, auth_method, confidence_score=None):
+def mark_attendance(student_id, session_id, auth_method, confidence_score=None, status='Present'):
     """
     Mark attendance for a student in a specific session.
-
-    Args:
-        student_id: Student's unique ID
-        session_id: Attendance session ID
-        auth_method: 'Face' or 'OTP'
-        confidence_score: LBPH confidence value (lower = better match), None for OTP
-
-    Returns:
-        True if successful, False if already marked
     """
     today = date.today().isoformat()
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -494,17 +530,58 @@ def mark_attendance(student_id, session_id, auth_method, confidence_score=None):
             (student_id, session_id)
         )
         if cursor.fetchone():
-            print(f"[DB] Attendance already marked for {student_id} in session {session_id}")
             return False
 
         cursor.execute(
             '''INSERT INTO attendance (student_id, session_id, date, status, auth_method, confidence_score, marked_at)
-               VALUES (?, ?, ?, 'Present', ?, ?, ?)''',
-            (student_id, session_id, today, auth_method, confidence_score, now_str)
+               VALUES (?, ?, ?, ?, ?, ?, ?)''',
+            (student_id, session_id, today, status, auth_method, confidence_score, now_str)
         )
         conn.commit()
-        print(f"[DB] Attendance marked for {student_id} in session {session_id} via {auth_method}")
         return True
+
+def get_pending_verifications(teacher_id):
+    """Fetch all 'Pending Verification' records for sessions belonging to this teacher."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        query = """
+            SELECT a.id as attendance_id, a.student_id, s.name as student_name, 
+                   sess.subject, sess.hour, a.marked_at, a.session_id
+            FROM attendance a
+            LEFT JOIN students s ON a.student_id = s.id
+            JOIN attendance_sessions sess ON a.session_id = sess.id
+            WHERE sess.teacher_id = ? AND a.status = 'Pending Verification'
+            ORDER BY a.marked_at DESC
+        """
+        cursor.execute(query, (teacher_id,))
+        return [dict(row) for row in cursor.fetchall()]
+
+def approve_attendance(attendance_id):
+    """Update attendance status to Present and method to Manual."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                "UPDATE attendance SET status = 'Present', auth_method = 'Manual' WHERE id = ?",
+                (attendance_id,)
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"[DB ERR] approve_attendance: {e}")
+            return False
+
+def reject_attendance(attendance_id):
+    """Remove a pending attendance record."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("DELETE FROM attendance WHERE id = ?", (attendance_id,))
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"[DB ERR] reject_attendance: {e}")
+            return False
 
 
 def get_attendance_records(student_id=None, subjects=None):

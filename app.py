@@ -11,6 +11,10 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from datetime import date, datetime, timedelta
 import math
+import base64
+from werkzeug.security import generate_password_hash, check_password_hash
+import hashlib
+import time
 
 # ── SmartMark imports ──────────────────────────────────────────────────────────
 from face_manager import capture_face, save_face, train_recognizer, recognize_face, check_face_enrolled
@@ -25,7 +29,6 @@ from database import (
     get_attendance_records,
     get_analytics_stats, get_active_session_stats, get_daily_trend, get_defaulters,
     get_all_students, get_student_attendance_summary,
-    get_all_students, get_student_attendance_summary,
     get_verification_method_stats,
     get_student_subject_summary,
     get_or_create_teacher, get_teacher, get_teacher_subjects, add_teacher, add_teacher_subject
@@ -36,7 +39,7 @@ app = Flask(__name__,
     static_folder=os.path.join(os.path.dirname(__file__), "static"),
     static_url_path="/static"
 )
-app.secret_key = "smartmark_unified_secret_key_2024"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "smartmark_unified_secret_key_2024")
 
 # Global recognizer state
 recognizer = None
@@ -52,9 +55,9 @@ DEFAULT_TEACHER = {
     "email": "sridevir@christuniversity.in"
 }
 
-CLASSROOM_LAT = 12.933416887384725
-CLASSROOM_LON = 77.60607102136017
-CLASSROOM_RADIUS = 50.0  # Realistic 50m radius
+CLASSROOM_LAT = float(os.environ.get("CLASSROOM_LAT", 12.933416887384725))
+CLASSROOM_LON = float(os.environ.get("CLASSROOM_LON", 77.60607102136017))
+CLASSROOM_RADIUS = float(os.environ.get("CLASSROOM_RADIUS", 20.0))
 
 
 SUBJECTS = [
@@ -82,6 +85,27 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
     return R * c
 
+def get_dynamic_qr_token(session_id):
+    """Generate a dynamic token that changes every 10 seconds."""
+    secret = app.secret_key
+    # 10-second slots
+    time_slot = int(time.time() // 10)
+    token_input = f"{session_id}{secret}{time_slot}"
+    return hashlib.sha256(token_input.encode()).hexdigest()[:10].upper()
+
+def verify_qr_token(session_id, token):
+    """Verify if the provided token is valid for the given session_id (allows +/- 1 slot)."""
+    if not token:
+        return False
+    current_slot = int(time.time() // 10)
+    # Check current and previous 10s slot for network lag buffer
+    for slot in [current_slot, current_slot - 1]:
+        token_input = f"{session_id}{app.secret_key}{slot}"
+        expected = hashlib.sha256(token_input.encode()).hexdigest()[:10].upper()
+        if token.upper() == expected:
+            return True
+    return False
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  TEACHER ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -96,18 +120,28 @@ def home():
 @app.route("/teacher/login", methods=["GET", "POST"])
 def teacher_login():
     if request.method == "POST":
-        teacher_id = request.form.get("teacher_id", "").strip()
-        email      = request.form.get("email", "").strip()
-        dept       = request.form.get("department", "").strip()
+        password   = request.form.get("password", "").strip()
 
-        if not teacher_id or not email:
-            flash("Teacher ID and Email are required.", "error")
+        teacher_id = request.form.get("teacher_id", "").strip()
+        if not teacher_id or not password:
+            flash("Teacher ID and Password are required.", "error")
             return redirect(url_for("teacher_login"))
 
-        teacher = get_or_create_teacher(teacher_id, email=email, department=dept)
-        session["teacher_id"] = teacher_id
-        flash(f"Welcome, {teacher['name']}!", "success")
-        return redirect(url_for("teacher_dashboard"))
+        teacher = get_teacher(teacher_id)
+        if teacher and teacher.get('password_hash'):
+            if check_password_hash(teacher['password_hash'], password):
+                session["teacher_id"] = teacher_id
+                flash(f"Welcome, {teacher['name']}!", "success")
+                return redirect(url_for("teacher_dashboard"))
+            else:
+                flash("Invalid password.", "error")
+        elif teacher:
+            # Legacy account without password
+            flash("This account requires a password update. Please register again with a password.", "warning")
+        else:
+            flash("Teacher ID not found. Please register.", "error")
+
+        return redirect(url_for("teacher_login"))
 
     return render_template("teacher_login.html")
 
@@ -118,18 +152,23 @@ def teacher_register():
         teacher_id = request.form.get("teacher_id", "").strip()
         name       = request.form.get("name", "").strip()
         email      = request.form.get("email", "").strip()
-        dept       = request.form.get("department", "").strip()
+        password     = request.form.get("password", "").strip()
         subjects_str = request.form.get("subjects", "").strip()
 
-        if not teacher_id or not name or not email:
-            flash("Teacher ID, Name, and Email are required.", "error")
+        if not teacher_id or not name or not email or not password:
+            flash("Teacher ID, Name, Email, and Password are required.", "error")
             return redirect(url_for("teacher_register"))
 
         if get_teacher(teacher_id):
             flash("Teacher ID already registered. Please login.", "warning")
             return redirect(url_for("teacher_login"))
 
+        dept         = request.form.get("department", "").strip()
+        password_hash = generate_password_hash(password)
         if add_teacher(teacher_id, name, email, dept):
+            from database import update_teacher_password
+            update_teacher_password(teacher_id, password_hash)
+            
             # Process subjects
             if subjects_str:
                 subject_list = [s.strip() for s in subjects_str.split(",") if s.strip()]
@@ -175,6 +214,9 @@ def teacher_dashboard():
     if now_hour >= 12: current_hour = 4
     if now_hour >= 13: current_hour = 5
     
+    from database import get_pending_verifications
+    pending_verifications = get_pending_verifications(teacher_id)
+
     return render_template(
         "teacher_dashboard.html",
         teacher=teacher,
@@ -182,7 +224,8 @@ def teacher_dashboard():
         active_sessions=active_sessions,
         stats=stats,
         current_hour=current_hour,
-        hour_labels=HOUR_LABELS
+        hour_labels=HOUR_LABELS,
+        pending_verifications=pending_verifications
     )
 
 
@@ -294,6 +337,32 @@ def api_students_search():
         if query in s["id"].lower() or query in s["name"].lower()
     ]
     return jsonify(results[:10]) # Limit to 10 results
+
+
+@app.route("/teacher/approve-verification/<int:attendance_id>", methods=["POST"])
+def teacher_approve_verification(attendance_id):
+    if "teacher_id" not in session:
+        return redirect(url_for("teacher_login"))
+    
+    from database import approve_attendance
+    if approve_attendance(attendance_id):
+        flash("Student verified successfully!", "success")
+    else:
+        flash("Failed to verify student.", "error")
+    return redirect(url_for("teacher_dashboard"))
+
+
+@app.route("/teacher/reject-verification/<int:attendance_id>", methods=["POST"])
+def teacher_reject_verification(attendance_id):
+    if "teacher_id" not in session:
+        return redirect(url_for("teacher_login"))
+    
+    from database import reject_attendance
+    if reject_attendance(attendance_id):
+        flash("Verification request rejected.", "warning")
+    else:
+        flash("Failed to reject request.", "error")
+    return redirect(url_for("teacher_dashboard"))
 
 
 
@@ -659,20 +728,27 @@ def download_excel():
 @app.route("/student/login", methods=["GET", "POST"])
 def student_login():
     if request.method == "POST":
+        password   = request.form.get("password", "").strip()
+
         student_id = request.form.get("student_id", "").strip()
-        email      = request.form.get("email", "").strip()
-
-        if not student_id:
-            flash("Student ID is required.", "error")
-            return redirect(url_for("student_login"))
-        if not email:
-            flash("Email is required.", "error")
+        if not student_id or not password:
+            flash("Student ID and Password are required.", "error")
             return redirect(url_for("student_login"))
 
-        get_or_create_student(student_id, email)
-        session["student_id"] = student_id
-        session["student_email"] = email  # Store email in session for OTP
-        return redirect(url_for("student_dashboard"))
+        student = get_student(student_id)
+        if student and student.get('password_hash'):
+            if check_password_hash(student['password_hash'], password):
+                session["student_id"] = student_id
+                session["student_email"] = student['email']
+                return redirect(url_for("student_dashboard"))
+            else:
+                flash("Invalid password.", "error")
+        elif student:
+            flash("This account requires a password update. Please register again.", "warning")
+        else:
+            flash("Student ID not found.", "error")
+            
+        return redirect(url_for("student_login"))
 
     return render_template("student_login.html")
 
@@ -680,20 +756,24 @@ def student_login():
 @app.route("/student/register", methods=["GET", "POST"])
 def student_register():
     if request.method == "POST":
+        password   = request.form.get("password", "").strip()
+
         student_id = request.form.get("student_id", "").strip()
         name       = request.form.get("name", "").strip()
         email      = request.form.get("email", "").strip()
-
-        if not student_id or not name or not email:
-            flash("Student ID, Name, and Email are required.", "error")
+        if not student_id or not name or not email or not password:
+            flash("All fields including password are required.", "error")
             return redirect(url_for("student_register"))
 
         if get_student(student_id):
-            flash("Student ID already registered. Please login.", "warning")
+            flash("Student ID already registered.", "warning")
             return redirect(url_for("student_login"))
 
+        password_hash = generate_password_hash(password)
         if add_student(student_id, name):
+            from database import update_student_password
             update_student_email(student_id, email)
+            update_student_password(student_id, password_hash)
             session["student_id"] = student_id
             session["student_email"] = email
             flash(f"Welcome, {name}! Registration successful.", "success")
@@ -714,9 +794,18 @@ def student_dashboard():
     face_enrolled = check_face_enrolled(student_id)
 
     active_sessions = get_active_sessions()
+    requested_session_id = request.args.get('request_verification', type=int)
+    
+    # Ensure requested session is in the list even if it just became inactive
+    session_ids = [s["id"] for s in active_sessions]
+    if requested_session_id and requested_session_id not in session_ids:
+        req_session = get_session(requested_session_id)
+        if req_session:
+            active_sessions.insert(0, req_session)
+
     sessions_with_status = []
     for s in active_sessions:
-        already_marked = check_attendance_for_session(student_id, s["id"])
+        att_status = check_attendance_for_session(student_id, s["id"])
         sessions_with_status.append({
             "id":            s["id"],
             "subject":       s["subject"],
@@ -724,7 +813,9 @@ def student_dashboard():
             "date":          s["date"],
             "latitude":      s["latitude"],
             "longitude":     s["longitude"],
-            "already_marked": already_marked
+            "already_marked": att_status is not None,
+            "status":        att_status,
+            "is_active":     s.get("is_active", 1) # Support checking if it's the requested but inactive one
         })
 
     my_records = get_attendance_records(student_id=student_id)
@@ -759,7 +850,7 @@ def enroll_face():
 
     if save_face(student_id, face):
         recognizer, label_map = train_recognizer()
-        flash("Face enrolled successfully! You can now mark attendance.", "success")
+        flash("Face scan added! Add 3-5 scans from different angles/lighting for best accuracy.", "success")
     else:
         flash("Failed to save face. Please try again.", "error")
 
@@ -786,109 +877,102 @@ def mark_attendance_route(session_id):
         flash("Attendance already marked for this session!", "warning")
         return redirect(url_for("student_dashboard"))
 
-    # Step 0: Location Check (Geofencing)
+    # Final Step: Location Verification (Geofencing)
     lat_str = request.form.get("latitude")
     lon_str = request.form.get("longitude")
 
     if not lat_str or not lon_str:
-        flash("Location access is required to mark attendance. Please enable location and try again.", "error")
+        flash("Location access is required to mark attendance.", "error")
         return redirect(url_for("student_dashboard"))
 
     try:
         student_lat = float(lat_str)
         student_lon = float(lon_str)
         
-        # Identify target location: prefer session-specific coordinates
         target_lat = att_session.get("latitude") if att_session.get("latitude") is not None else CLASSROOM_LAT
         target_lon = att_session.get("longitude") if att_session.get("longitude") is not None else CLASSROOM_LON
         
         distance = haversine_distance(student_lat, student_lon, target_lat, target_lon)
         
-        print(f"[LOCATION] Student {student_id} position: ({student_lat}, {student_lon})")
-        print(f"[LOCATION] Distance from session origin ({target_lat}, {target_lon}): {distance:.2f}m")
-        
         if distance > CLASSROOM_RADIUS:
-            flash(f"You are outside the classroom range ({distance:.1f}m away). Please go inside to mark attendance.", "error")
+            flash(f"Out of range ({distance:.1f}m). Please go inside to mark attendance.", "error")
             return redirect(url_for("student_dashboard"))
+            
+        # STEP 2: Mandatory QR Token Verification
+        qr_token = request.form.get("qr_token")
+        if not verify_qr_token(session_id, qr_token):
+            flash("QR Code verification failed or expired. Please scan the current QR code on the teacher's screen.", "error")
+            return redirect(url_for("student_dashboard"))
+
+        # STEP 3: Face Recognition Flow
+        from face_manager import capture_face, train_recognizer, recognize_face
+        
+        # Capture face
+        face = capture_face()
+        if face is None:
+            flash("Face capture cancelled or no face detected.", "error")
+            return redirect(url_for("student_dashboard"))
+
+        # Train recognizer if not ready
+        if recognizer is None:
+            recognizer, label_map = train_recognizer()
+
+        # Recognize
+        if recognizer is not None and label_map:
+            matched_id, confidence = recognize_face(recognizer, label_map, face)
+            print(f"[DEBUG] Face Recognition - Student ID: {student_id}, Predicted ID: {matched_id}, Confidence: {confidence:.2f}")
+        else:
+            print("[DEBUG] Face Recognition - Model not ready, retraining...")
+            recognizer, label_map = train_recognizer()
+            if recognizer and label_map:
+                matched_id, confidence = recognize_face(recognizer, label_map, face)
+            else:
+                flash("Face recognition model is not initialized. Please enroll your face.", "error")
+                return redirect(url_for("student_dashboard"))
+
+        # Handle Match
+        if matched_id:
+            if str(matched_id) == str(student_id):
+                if mark_attendance(student_id, session_id, auth_method="Face", confidence_score=round(confidence, 2)):
+                    flash(f"Face recognized! Attendance marked for {att_session['subject']}.", "success")
+                    return redirect(url_for("attendance_confirmed", session_id=session_id, method="Face"))
+            else:
+                # Recognized as someone else
+                flash(f"Face recognized as a different student. Please try again or request manual verification.", "warning")
+                print(f"[FACE] Mismatch: Student {student_id} scanned as {matched_id} (conf: {confidence:.2f})")
+                return redirect(url_for("student_dashboard", request_verification=session_id))
+        
+        # No Match at all
+        flash("Face not recognized. Tip: Add more face scans from different angles to improve accuracy.", "warning")
+        return redirect(url_for("student_dashboard", request_verification=session_id))
+            
     except ValueError:
         flash("Invalid location data received.", "error")
         return redirect(url_for("student_dashboard"))
 
-    # Step 1: Capture face
-    face = capture_face()
-    if face is None:
-        flash("Face capture cancelled or no face detected.", "error")
-        return redirect(url_for("student_dashboard"))
 
-    # Step 2: Train recognizer if not ready
-    if recognizer is None:
-        recognizer, label_map = train_recognizer()
-
-    # Step 3: Recognize
-    if recognizer is not None and label_map:
-        matched_id, confidence = recognize_face(recognizer, label_map, face)
-    else:
-        matched_id = None
-        confidence = float("inf")
-
-    # Step 4: Face match → mark instantly
-    if matched_id and matched_id == student_id:
-        mark_attendance(student_id, session_id, auth_method="Face",
-                        confidence_score=round(confidence, 2))
-        flash(f"Face recognised! Attendance marked for {att_session['subject']} – Hour {att_session['hour']}.", "success")
-        return redirect(url_for("attendance_confirmed",
-                                session_id=session_id, method="Face"))
-
-    # Step 5: OTP Fallback (using teacher's email from session)
-    student = get_student(student_id)
-    student_name = student["name"] if student else student_id
-    
-    teacher_id = att_session.get("teacher_id")
-    teacher = get_teacher(teacher_id) if teacher_id else None
-    teacher_email = teacher["email"] if teacher else None
-
-    if teacher_email:
-        otp = generate_otp()
-        session["otp"]            = otp
-        session["otp_session_id"] = session_id
-        
-        send_otp_email_async(teacher_email, otp, student_name=student_name)
-        flash(f"Face not recognised. An OTP has been sent to your teacher's email ({teacher_email}). Please ask them for the code.", "info")
-        return redirect(url_for("otp_verify"))
-    else:
-        flash("Face not recognised. No teacher found for this session to send a verification code to.", "error")
-        return redirect(url_for("student_dashboard"))
-
-
-@app.route("/student/otp", methods=["GET", "POST"])
-def otp_verify():
+@app.route("/student/request-verification/<int:session_id>", methods=["POST"])
+def student_request_verification(session_id):
     if "student_id" not in session:
         return redirect(url_for("student_login"))
+    
+    student_id = session["student_id"]
+    print(f"[DEBUG] Requesting verification: student={student_id}, session={session_id}")
+    att_session = get_session(session_id)
+    if not att_session:
+        flash("Session not found.", "error")
+        return redirect(url_for("student_dashboard"))
 
-    if request.method == "POST":
-        user_otp   = request.form.get("otp", "").strip()
-        stored_otp = session.get("otp", "")
-        session_id = session.get("otp_session_id")
+    # Create a pending attendance record
+    if mark_attendance(student_id, session_id, auth_method="Manual", 
+                        confidence_score=None, status="Pending Verification"):
+        flash("Verification request sent! Please wait for your teacher to approve.", "success")
+    else:
+        flash("Request already sent or attendance already marked.", "warning")
+        
+    return redirect(url_for("student_dashboard"))
 
-        if not session_id:
-            flash("Session expired. Please try again.", "error")
-            return redirect(url_for("student_dashboard"))
 
-        if validate_otp(user_otp, stored_otp):
-            student_id  = session["student_id"]
-            att_session = get_session(session_id)
-            mark_attendance(student_id, session_id, auth_method="OTP",
-                            confidence_score=None)
-            session.pop("otp", None)
-            session.pop("otp_session_id", None)
-            flash(f"OTP verified! Attendance marked for {att_session['subject']} – Hour {att_session['hour']}.", "success")
-            return redirect(url_for("attendance_confirmed",
-                                    session_id=session_id, method="OTP"))
-        else:
-            flash("Invalid OTP. Please try again.", "error")
-            return redirect(url_for("otp_verify"))
-
-    return render_template("otp_verify.html")
 
 
 @app.route("/student/confirmed")
@@ -933,6 +1017,86 @@ def student_logout():
     session.clear()
     return redirect(url_for("student_login"))
 
+
+@app.route("/session/<int:session_id>/qr-token")
+def session_qr_token(session_id):
+    """Endpoint for teacher dashboard to get current dynamic QR token."""
+    if "teacher_id" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+    
+    token = get_dynamic_qr_token(session_id)
+    # Also return time remaining in current 10s slot
+    time_remaining = 10 - (int(time.time()) % 10)
+    
+    return jsonify({
+        "token": token,
+        "expires_in": time_remaining
+    })
+
+@app.route("/student/mark-attendance-qr", methods=["POST"])
+def mark_attendance_qr():
+    if "student_id" not in session:
+        return jsonify({"success": False, "message": "Login required"}), 401
+    
+    student_id = session["student_id"]
+    session_id = request.form.get("session_id")
+    scanned_token = request.form.get("token")
+    lat_str = request.form.get("latitude")
+    lon_str = request.form.get("longitude")
+
+    if not all([session_id, scanned_token, lat_str, lon_str]):
+        return jsonify({"success": False, "message": "Missing required fields"}), 400
+
+    att_session = get_session(session_id)
+    if not att_session or not att_session.get("is_active"):
+        return jsonify({"success": False, "message": "Session is inactive"}), 404
+
+    # 1. Location Check
+    try:
+        student_lat = float(lat_str)
+        student_lon = float(lon_str)
+        target_lat = att_session.get("latitude") or CLASSROOM_LAT
+        target_lon = att_session.get("longitude") or CLASSROOM_LON
+        distance = haversine_distance(student_lat, student_lon, target_lat, target_lon)
+        
+        if distance > CLASSROOM_RADIUS:
+            return jsonify({"success": False, "message": f"Out of range ({distance:.1f}m)."}), 403
+    except ValueError:
+        return jsonify({"success": False, "message": "Invalid coordinates"}), 400
+
+    # 2. Token Check (Allow +/- 1 slot for sync issues)
+    valid_tokens = []
+    current_slot = int(time.time() // 10)
+    for slot in [current_slot, current_slot - 1]:
+        token_input = f"{session_id}{app.secret_key}{slot}"
+        valid_tokens.append(hashlib.sha256(token_input.encode()).hexdigest()[:10].upper())
+
+    if scanned_token.upper() not in valid_tokens:
+        return jsonify({"success": False, "message": "QR Code expired or invalid. Please scan the latest code."}), 403
+
+    # 3. Mark Attendance
+    if check_attendance_for_session(student_id, session_id):
+        return jsonify({"success": False, "message": "Already marked!"}), 400
+
+    if mark_attendance(student_id, session_id, auth_method="QR"):
+        return jsonify({"success": True, "message": "Attendance marked successfully via QR!"})
+    
+    return jsonify({"success": False, "message": "Failed to mark attendance."}), 500
+
+
+@app.route("/student/verify-qr-only", methods=["POST"])
+def verify_qr_only():
+    """Standalone QR verification for the 'Step 1' UI feedback."""
+    if "student_id" not in session:
+        return jsonify({"success": False, "message": "Login required"}), 401
+    
+    session_id = request.form.get("session_id")
+    token = request.form.get("token")
+    
+    if verify_qr_token(session_id, token):
+        return jsonify({"success": True, "message": "QR Verified! Move to Face Scan."})
+    else:
+        return jsonify({"success": False, "message": "Invalid or expired QR. Try again."})
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  RUN

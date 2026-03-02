@@ -18,7 +18,7 @@ from database import (
     get_all_faces_from_db
 )
 
-CONFIDENCE_THRESHOLD = 55  # Tightened from 65 to further reduce false positives
+CONFIDENCE_THRESHOLD = 85  # Adjusted from 75 to improve recognition reliability
 DATASET_DIR = "datasets"
 
 
@@ -150,8 +150,8 @@ def train_recognizer():
 
 def capture_face():
     """
-    Open webcam and capture a face image.
-    Press 'C' to capture, 'Q' to cancel.
+    Open webcam and capture a face image with a simple liveness check.
+    Asks the user to blink or move to ensure it's not a static photo.
     
     Returns:
         Captured grayscale face image, or None if cancelled/failed
@@ -163,68 +163,70 @@ def capture_face():
         return None
     
     face_cascade = get_face_cascade()
+    eye_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_eye.xml')
     captured_face = None
+    liveness_detected = False
+    start_time = time.time()
     
-    print("[FACE] Camera opened. Press 'C' to capture, 'Q' to cancel.")
+    print("[FACE] Camera opened. Liveness check: Please BLINK or MOVE your head.")
+    
+    prev_gray = None
     
     while True:
         ret, frame = cap.read()
-        if not ret:
-            print("[FACE] Error: Failed to read from camera.")
-            break
+        if not ret: break
         
-        # Flip for mirror effect
         frame = cv2.flip(frame, 1)
-        
-        # Convert to grayscale for face detection
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # Detect faces
-        faces = face_cascade.detectMultiScale(
-            gray, 
-            scaleFactor=1.1, 
-            minNeighbors=5, 
-            minSize=(100, 100)
-        )
-        
-        # Draw rectangles around detected faces
-        for (x, y, w, h) in faces:
-            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+        faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(100, 100))
         
         # Display instructions
-        cv2.putText(frame, "Press 'C' to capture, 'Q' to quit", 
+        cv2.putText(frame, "Liveness Check: Please BLINK or MOVE", 
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
         if len(faces) > 0:
-            cv2.putText(frame, "Face detected!", 
-                        (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            (x, y, w, h) = faces[0]
+            cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            roi_gray = gray[y:y+h, x:x+w]
+            
+            # Simple Liveness 1: Eye Detection
+            eyes = eye_cascade.detectMultiScale(roi_gray, 1.1, 10)
+            
+            # Simple Liveness 2: Movement Detection (Optical Flow / Frame Diff)
+            if prev_gray is not None:
+                diff = cv2.absdiff(gray, prev_gray)
+                movement = np.sum(diff) / (gray.shape[0] * gray.shape[1])
+                if movement > 2.0: # Threshold for significant movement
+                    liveness_detected = True
+            
+            prev_gray = gray.copy()
+            
+            if liveness_detected:
+                cv2.putText(frame, "Liveness Verified! Press 'C' to Capture", 
+                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            else:
+                cv2.putText(frame, "Checking for movement...", 
+                            (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
         
         cv2.imshow('Attendance - Face Capture', frame)
-        
         key = cv2.waitKey(1) & 0xFF
         
-        if key == ord('c') or key == ord('C'):
+        if (key == ord('c') or key == ord('C')) and liveness_detected:
             if len(faces) > 0:
-                # Get the first detected face
                 (x, y, w, h) = faces[0]
                 captured_face = gray[y:y+h, x:x+w]
                 captured_face = cv2.resize(captured_face, (200, 200))
-                
-                # Apply Histogram Equalization
                 captured_face = cv2.equalizeHist(captured_face)
-                
-                print("[FACE] Face captured successfully!")
                 break
-            else:
-                print("[FACE] No face detected. Please position your face in the frame.")
-        
         elif key == ord('q') or key == ord('Q'):
-            print("[FACE] Capture cancelled by user.")
+            break
+            
+        if time.time() - start_time > 30: # Timeout
+            print("[FACE] Liveness check timed out.")
             break
     
     cap.release()
     cv2.destroyAllWindows()
-    
     return captured_face
 
 
@@ -280,24 +282,23 @@ def save_face(student_id, face_image):
     # 1. Save to datasets folder
     try:
         student_dir = os.path.join(DATASET_DIR, str(student_id))
-        if os.path.exists(student_dir):
-            # Clean up old images before saving new ones (Clean Enrollment policy)
-            for f in os.listdir(student_dir):
-                if f.endswith(('.jpg', '.png', '.jpeg')):
-                    try:
-                        os.remove(os.path.join(student_dir, f))
-                    except: pass
-        else:
+        if not os.path.exists(student_dir):
             os.makedirs(student_dir)
+        
+        # Limit to 10 images: if more than 10, delete the oldest one
+        existing_images = sorted([f for f in os.listdir(student_dir) if f.endswith(('.jpg', '.png', '.jpeg'))])
+        if len(existing_images) >= 10:
+            try:
+                os.remove(os.path.join(student_dir, existing_images[0]))
+            except: pass
             
-        timestamp = int(time.time())
+        timestamp = int(time.time() * 1000) # milliseconds for uniqueness
         img_path = os.path.join(student_dir, f"{timestamp}.jpg")
         
         cv2.imwrite(img_path, face_image)
-        print(f"[FACE] Face image saved to disk: {img_path}")
+        print(f"[FACE] Saved enrollment image {len(existing_images)+1}/10 for student {student_id}")
     except Exception as e:
         print(f"[FACE] Error saving to disk: {e}")
-        # Continue to database attempt
     
     # 2. Save to database (Legacy support / backup)
     face_bytes = encode_face_to_bytes(face_image)

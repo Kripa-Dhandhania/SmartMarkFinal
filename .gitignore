@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+ENV/
+
+# Database
+attendance.db
+*.sqlite3
+
+# Environment
+.env
+.flaskenv
+
+# OS
+.DS_Store
+Thumbs.db

@@ -34,8 +34,8 @@ def send_otp_email(recipient_email, otp, student_name=None):
     Send OTP to recipient email (now teacher) via SMTP.
     Includes student name to help teacher identify the request.
     """
-    sender_email = os.environ.get('SMTP_EMAIL', 'sanya.agarwal240@gmail.com')
-    sender_password = os.environ.get('SMTP_PASSWORD', 'afnz lavl pfro schl')
+    sender_email = os.environ.get('SMTP_EMAIL')
+    sender_password = os.environ.get('SMTP_PASSWORD')
 
     if not sender_email or not sender_password:
         print("[OTP] SMTP credentials not configured. OTP printed to terminal only.")

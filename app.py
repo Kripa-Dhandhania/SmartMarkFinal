@@ -766,8 +766,9 @@ def student_register():
             flash("All fields including password are required.", "error")
             return redirect(url_for("student_register"))
 
-        if get_student(student_id):
-            flash("Student ID already registered.", "warning")
+        student = get_student(student_id)
+        if student and student.get('password_hash'):
+            flash("Student ID already registered. Please login.", "warning")
             return redirect(url_for("student_login"))
 
         password_hash = generate_password_hash(password)

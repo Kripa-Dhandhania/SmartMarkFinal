@@ -236,6 +236,34 @@ def init_db():
                     (tid, sname, cinfo)
                 )
 
+        # ── Seed Students ──────────────────────────────────────────────────────
+        students_to_seed = [
+            ("2547130", "Kripa Dhandhania", "kripa@example.com"),
+            ("2547135", "Student Test", "test@example.com"),
+            ("S2347101", "New Student", "new@example.com"),
+        ]
+
+        for sid, sname, semail in students_to_seed:
+            cursor.execute("SELECT id, password_hash FROM students WHERE id = ?", (sid,))
+            existing = cursor.fetchone()
+            if not existing:
+                phash = generate_password_hash("student@123")
+                cursor.execute(
+                    'INSERT INTO students (id, name, email, password_hash) VALUES (?, ?, ?, ?)',
+                    (sid, sname, semail, phash)
+                )
+            elif not existing['password_hash']:
+                phash = generate_password_hash("student@123")
+                cursor.execute('UPDATE students SET password_hash = ? WHERE id = ?', (phash, sid))
+
+        for tid, sname, cinfo in subjects_to_seed:
+            cursor.execute("SELECT 1 FROM teacher_subjects WHERE teacher_id = ? AND subject_name = ?", (tid, sname))
+            if not cursor.fetchone():
+                cursor.execute(
+                    'INSERT INTO teacher_subjects (teacher_id, subject_name, class_info) VALUES (?, ?, ?)',
+                    (tid, sname, cinfo)
+                )
+
         conn.commit()
         print("[DB] Database initialized successfully.")
 

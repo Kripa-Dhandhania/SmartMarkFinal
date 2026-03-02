@@ -107,6 +107,7 @@ def init_db():
                 date TEXT NOT NULL,
                 status TEXT DEFAULT 'Present',
                 auth_method TEXT NOT NULL,
+                confidence_score REAL,
                 marked_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (student_id) REFERENCES students(id),
                 FOREIGN KEY (session_id) REFERENCES attendance_sessions(id)
@@ -141,9 +142,13 @@ def init_db():
             cursor.execute('DROP TABLE attendance_old')
             print("[DB] Migration complete.")
         else:
-            # Just add session_id column if it doesn't exist
+            # Migration: add missing columns to attendance table
             try:
                 cursor.execute("ALTER TABLE attendance ADD COLUMN session_id INTEGER")
+            except sqlite3.OperationalError:
+                pass  # Column already exists
+            try:
+                cursor.execute("ALTER TABLE attendance ADD COLUMN confidence_score REAL")
             except sqlite3.OperationalError:
                 pass  # Column already exists
         

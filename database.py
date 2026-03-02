@@ -168,6 +168,28 @@ def init_db():
         except sqlite3.OperationalError:
             pass
 
+        # Create teacher_subjects table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS teacher_subjects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                teacher_id TEXT NOT NULL,
+                subject_name TEXT NOT NULL,
+                class_info TEXT,
+                FOREIGN KEY (teacher_id) REFERENCES teachers(id)
+            )
+        ''')
+
+        # Create face_images table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS face_images (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                face_data BLOB NOT NULL,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES students(id)
+            )
+        ''')
+
         # ── Seed Official Records ──────────────────────────────────────────────
         teachers_to_seed = [
             ("T1001", "Dr. R. Sridevi", "s@christuniversity.in", "Department of Computer Science"),

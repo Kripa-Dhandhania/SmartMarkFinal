@@ -1,3 +1,4 @@
+
 """
 Database Module for Smart Attendance System
 Handles SQLite operations for students, attendance sessions, attendance records, and face images.
@@ -192,6 +193,21 @@ def init_db():
                 student_id TEXT NOT NULL,
                 face_data BLOB NOT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (student_id) REFERENCES students(id)
+            )
+        ''')
+
+        # Create leave_requests table
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS leave_requests (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id TEXT NOT NULL,
+                start_date TEXT NOT NULL,
+                end_date TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                other_reason TEXT,
+                status TEXT DEFAULT 'Pending', -- Pending, Approved, Rejected
+                applied_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (student_id) REFERENCES students(id)
             )
         ''')
@@ -568,15 +584,33 @@ def get_session(session_id):
 # ============== ATTENDANCE FUNCTIONS ==============
 
 def check_attendance_for_session(student_id, session_id):
-    """Check if student already marked attendance for a specific session. Returns status string or None."""
+    """Check if student already marked attendance or has an approved leave for the session's date. Returns status string or None."""
     with get_connection() as conn:
         cursor = conn.cursor()
+        
+        # 1. Check direct attendance record for this specific session
         cursor.execute(
             'SELECT status FROM attendance WHERE student_id = ? AND session_id = ?',
             (student_id, session_id)
         )
         result = cursor.fetchone()
-        return result[0] if result else None
+        if result:
+            return result[0]
+            
+        # 2. Fallback: Check for approved leave on the session date
+        cursor.execute('SELECT date FROM attendance_sessions WHERE id = ?', (session_id,))
+        sess = cursor.fetchone()
+        if sess:
+            sess_date = sess['date']
+            cursor.execute('''
+                SELECT 1 FROM leave_requests 
+                WHERE student_id = ? AND status = 'Approved' 
+                AND ? BETWEEN start_date AND end_date
+            ''', (student_id, sess_date))
+            if cursor.fetchone():
+                return 'Excused'
+                
+        return None
 
 
 def mark_attendance(student_id, session_id, auth_method, confidence_score=None, status='Present'):
@@ -1085,3 +1119,54 @@ def get_student_subject_summary(student_id):
 if __name__ == '__main__':
     init_db()
     print("Database setup complete!")
+# ============== LEAVE REQUEST FUNCTIONS ==============
+
+def create_leave_request(student_id, start_date, end_date, reason, other_reason=None):
+    """Store a new leave request in the database."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                '''INSERT INTO leave_requests (student_id, start_date, end_date, reason, other_reason) 
+                   VALUES (?, ?, ?, ?, ?)''',
+                (student_id, start_date, end_date, reason, other_reason)
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            print(f"[DB ERR] create_leave_request: {e}")
+            return False
+
+def get_leave_requests(student_id=None, status=None):
+    """Fetch leave requests, optionally filtered by student and/or status."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        query = """
+            SELECT lr.*, s.name as student_name 
+            FROM leave_requests lr
+            JOIN students s ON lr.student_id = s.id
+            WHERE 1=1
+        """
+        params = []
+        if student_id:
+            query += " AND lr.student_id = ?"
+            params.append(student_id)
+        if status:
+            query += " AND lr.status = ?"
+            params.append(status)
+            
+        query += " ORDER BY lr.applied_at DESC"
+        cursor.execute(query, params)
+        return [dict(row) for row in cursor.fetchall()]
+
+def update_leave_status(request_id, status):
+    """Update status of a leave request (Approved/Rejected)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("UPDATE leave_requests SET status = ? WHERE id = ?", (status, request_id))
+            conn.commit()
+            return cursor.rowcount > 0
+        except Exception as e:
+            print(f"[DB ERR] update_leave_status: {e}")
+            return False

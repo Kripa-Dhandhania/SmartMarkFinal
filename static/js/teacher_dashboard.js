@@ -225,35 +225,26 @@ function initManualMark() {
     });
 }
 
-// ── Dynamic QR Fallback Logic ───────────────────────────────────────────────
-function initQRFallback() {
-    const qrModal = document.getElementById('qr-modal');
-    const qrContainer = document.getElementById('qrcode-container');
-    const closeBtn = document.getElementById('close-qr-modal');
-    const countdownEl = document.getElementById('qr-countdown');
-    const qrButtons = document.querySelectorAll('.qr-display-btn');
+// ── Dynamic OTP Fallback Logic ───────────────────────────────────────────────
+function initOTPFallback() {
+    const otpModal = document.getElementById('otp-modal');
+    const otpContainer = document.getElementById('otp-code-container');
+    const closeBtn = document.getElementById('close-otp-modal');
+    const countdownEl = document.getElementById('otp-countdown');
+    const otpButtons = document.querySelectorAll('.otp-display-btn');
 
-    let qr = null;
     let refreshInterval = null;
     let countdownInterval = null;
     let activeSessionId = null;
 
-    function updateQR() {
+    function updateOTP() {
         if (!activeSessionId) return;
 
-        fetch(`/session/${activeSessionId}/qr-token`)
+        fetch(`/session/${activeSessionId}/otp`)
             .then(res => res.json())
             .then(data => {
                 if (data.token) {
-                    qrContainer.innerHTML = '';
-                    qr = new QRCode(qrContainer, {
-                        text: data.token,
-                        width: 200,
-                        height: 200,
-                        colorDark: "#1e3a8a",
-                        colorLight: "#f8fafc",
-                        correctLevel: QRCode.CorrectLevel.H
-                    });
+                    otpContainer.textContent = data.token;
 
                     // Sync countdown
                     let remaining = data.expires_in;
@@ -262,42 +253,42 @@ function initQRFallback() {
                     clearInterval(countdownInterval);
                     countdownInterval = setInterval(() => {
                         remaining--;
-                        if (remaining <= 0) remaining = 10;
+                        if (remaining < 0) remaining = 0;
                         countdownEl.textContent = remaining;
                     }, 1000);
                 }
             });
     }
 
-    qrButtons.forEach(btn => {
+    otpButtons.forEach(btn => {
         btn.addEventListener('click', () => {
             activeSessionId = btn.dataset.sessionId;
-            document.getElementById('qr-modal-title').textContent = `Attendance QR: ${btn.dataset.subject}`;
-            qrModal.style.display = 'flex';
-            qrModal.classList.remove('hidden');
+            document.getElementById('otp-modal-title').textContent = `Attendance OTP: ${btn.dataset.subject}`;
+            otpModal.style.display = 'flex';
+            otpModal.classList.remove('hidden');
 
-            updateQR();
-            refreshInterval = setInterval(updateQR, 10000);
+            updateOTP();
+            refreshInterval = setInterval(updateOTP, 10000);
         });
     });
 
-    function closeQRModal() {
-        qrModal.style.display = 'none';
-        qrModal.classList.add('hidden');
+    function closeOTPModal() {
+        otpModal.style.display = 'none';
+        otpModal.classList.add('hidden');
         clearInterval(refreshInterval);
         clearInterval(countdownInterval);
         activeSessionId = null;
     }
 
-    closeBtn?.addEventListener('click', closeQRModal);
+    closeBtn?.addEventListener('click', closeOTPModal);
     window.addEventListener('click', (e) => {
-        if (e.target === qrModal) closeQRModal();
+        if (e.target === otpModal) closeOTPModal();
     });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     initTimers();
     initManualMark();
-    initQRFallback();
+    initOTPFallback();
 });
 

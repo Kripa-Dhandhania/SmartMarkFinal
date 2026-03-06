@@ -9,6 +9,7 @@ ENV/
 # Database
 attendance.db
 *.sqlite3
+datasets/
 
 # Environment
 .env

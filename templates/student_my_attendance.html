@@ -344,9 +344,6 @@
                 <a href="{{ url_for('student_my_attendance') }}" class="sd-nav-item active">
                     <i class="fas fa-history"></i><span>My Attendance</span>
                 </a>
-                <a href="{{ url_for('enroll_face') }}" class="sd-nav-item">
-                    <i class="fas fa-camera"></i><span>Face Enroll</span>
-                </a>
                 <a href="{{ url_for('teacher_dashboard') }}" class="sd-nav-item">
                     <i class="fas fa-chalkboard-teacher"></i><span>Teacher Portal</span>
                 </a>
@@ -518,6 +515,10 @@
                                         <span class="badge-location"
                                             style="background:#e0f2fe; color:#0369a1; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700;"><i
                                                 class="fas fa-map-marker-alt"></i> Location</span>
+                                        {% elif r.auth_method == 'Manual' %}
+                                        <span class="badge-manual"
+                                            style="background:#fffbeb; color:#92400e; border:1px solid #fcd34d; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700;"><i
+                                                class="fas fa-user-shield"></i> Manual</span>
                                         {% else %}
                                         <span class="badge-otp"
                                             style="background:#fff7ed; border:1px solid #fed7aa; color:#c2410c; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:700;"><i

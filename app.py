@@ -11,10 +11,13 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment
 from datetime import date, datetime, timedelta
 import math
-import base64
-from werkzeug.security import generate_password_hash, check_password_hash
 import hashlib
+import base64
 import time
+from PIL import Image
+import numpy as np
+import cv2
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # ── SmartMark imports ──────────────────────────────────────────────────────────
 from face_manager import capture_face, save_face, train_recognizer, recognize_face, check_face_enrolled
@@ -31,7 +34,8 @@ from database import (
     get_all_students, get_student_attendance_summary,
     get_verification_method_stats,
     get_student_subject_summary,
-    get_or_create_teacher, get_teacher, get_teacher_subjects, add_teacher, add_teacher_subject
+    get_or_create_teacher, get_teacher, get_teacher_subjects, add_teacher, add_teacher_subject,
+    create_leave_request, get_leave_requests, update_leave_status
 )
 
 # ── App setup ──────────────────────────────────────────────────────────────────
@@ -85,26 +89,59 @@ def haversine_distance(lat1, lon1, lat2, lon2):
 
     return R * c
 
-def get_dynamic_qr_token(session_id):
-    """Generate a dynamic token that changes every 10 seconds."""
+def get_dynamic_otp(session_id):
+    """Generate a dynamic 6-digit numeric OTP that changes every 10 seconds."""
     secret = app.secret_key
     # 10-second slots
     time_slot = int(time.time() // 10)
     token_input = f"{session_id}{secret}{time_slot}"
-    return hashlib.sha256(token_input.encode()).hexdigest()[:10].upper()
+    hash_val = int(hashlib.sha256(token_input.encode()).hexdigest(), 16)
+    return str(hash_val % 1000000).zfill(6)
 
-def verify_qr_token(session_id, token):
-    """Verify if the provided token is valid for the given session_id (allows +/- 1 slot)."""
+def verify_otp(session_id, token):
+    """Verify if the provided 6-digit OTP is valid for the given session_id (allows +/- 1 slot)."""
     if not token:
         return False
     current_slot = int(time.time() // 10)
     # Check current and previous 10s slot for network lag buffer
     for slot in [current_slot, current_slot - 1]:
         token_input = f"{session_id}{app.secret_key}{slot}"
-        expected = hashlib.sha256(token_input.encode()).hexdigest()[:10].upper()
-        if token.upper() == expected:
+        hash_val = int(hashlib.sha256(token_input.encode()).hexdigest(), 16)
+        expected = str(hash_val % 1000000).zfill(6)
+        if str(token) == expected:
             return True
     return False
+
+def decode_base64_image(data_url):
+    """Convert a browser-side data URL (Base64) to an OpenCV grayscale image."""
+    try:
+        if ',' in data_url:
+            data_url = data_url.split(',')[1]
+        
+        image_data = base64.b64decode(data_url)
+        image = Image.open(io.BytesIO(image_data))
+        
+        # Convert to OpenCV format (Grayscale)
+        frame = np.array(image.convert('RGB'))
+        gray = cv2.cvtColor(frame, cv2.COLOR_RGB2GRAY)
+        
+        # Detect face in the captured frame
+        from face_manager import get_face_cascade
+        face_cascade = get_face_cascade()
+        faces = face_cascade.detectMultiScale(gray, 1.1, 5, minSize=(100, 100))
+        
+        if len(faces) > 0:
+            (x, y, w, h) = faces[0]
+            face_img = gray[y:y+h, x:x+w]
+            face_img = cv2.resize(face_img, (200, 200))
+            face_img = cv2.equalizeHist(face_img)
+            return face_img
+        
+        # Fallback: if no face detected in specialized crop, return centered crop or original
+        return cv2.resize(gray, (200, 200))
+    except Exception as e:
+        print(f"[ERROR] decode_base64_image: {e}")
+        return None
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  TEACHER ROUTES
@@ -844,14 +881,26 @@ def enroll_face():
         return redirect(url_for("student_login"))
 
     student_id = session["student_id"]
-    face = capture_face()
+    
+    # Try browser-side capture data first
+    face_base64 = request.form.get("face_image")
+    if face_base64:
+        face = decode_base64_image(face_base64)
+    else:
+        # Fallback for local development (server-side camera)
+        face = capture_face()
 
     if face is None:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest" or face_base64:
+            return jsonify({"success": False, "message": "No face detected in scan."})
         flash("Face capture cancelled or no face detected.", "error")
         return redirect(url_for("student_dashboard"))
 
     if save_face(student_id, face):
         recognizer, label_map = train_recognizer()
+        if face_base64:
+            flash("Face scan added successfully!", "success")
+            return jsonify({"success": True, "message": "Face scan added!"})
         flash("Face scan added! Add 3-5 scans from different angles/lighting for best accuracy.", "success")
     else:
         flash("Failed to save face. Please try again.", "error")
@@ -900,19 +949,25 @@ def mark_attendance_route(session_id):
             flash(f"Out of range ({distance:.1f}m). Please go inside to mark attendance.", "error")
             return redirect(url_for("student_dashboard"))
             
-        # STEP 2: Mandatory QR Token Verification
+        # STEP 2: Mandatory OTP Verification
         qr_token = request.form.get("qr_token")
-        if not verify_qr_token(session_id, qr_token):
-            flash("QR Code verification failed or expired. Please scan the current QR code on the teacher's screen.", "error")
+        if not verify_otp(session_id, qr_token):
+            flash("OTP verification failed or expired. Please enter the current code from the teacher's screen.", "error")
             return redirect(url_for("student_dashboard"))
 
         # STEP 3: Face Recognition Flow
         from face_manager import capture_face, train_recognizer, recognize_face
         
-        # Capture face
-        face = capture_face()
+        # Try browser-side capture data first
+        face_base64 = request.form.get("face_image")
+        if face_base64:
+            face = decode_base64_image(face_base64)
+        else:
+            # Fallback for local development (server-side camera)
+            face = capture_face()
+
         if face is None:
-            flash("Face capture cancelled or no face detected.", "error")
+            flash("Face capture failed or no face detected. Please try again.", "error")
             return redirect(url_for("student_dashboard"))
 
         # Train recognizer if not ready
@@ -959,13 +1014,39 @@ def student_request_verification(session_id):
         return redirect(url_for("student_login"))
     
     student_id = session["student_id"]
-    print(f"[DEBUG] Requesting verification: student={student_id}, session={session_id}")
     att_session = get_session(session_id)
-    if not att_session:
-        flash("Session not found.", "error")
+    if not att_session or not att_session.get("is_active"):
+        flash("Session not found or inactive.", "error")
         return redirect(url_for("student_dashboard"))
 
-    # Create a pending attendance record
+    # 1. Location Verification
+    lat_str = request.form.get("latitude")
+    lon_str = request.form.get("longitude")
+    if not lat_str or not lon_str:
+        flash("Location access is required for manual verification.", "error")
+        return redirect(url_for("student_dashboard"))
+
+    try:
+        student_lat = float(lat_str)
+        student_lon = float(lon_str)
+        target_lat = att_session.get("latitude") or CLASSROOM_LAT
+        target_lon = att_session.get("longitude") or CLASSROOM_LON
+        distance = haversine_distance(student_lat, student_lon, target_lat, target_lon)
+        
+        if distance > CLASSROOM_RADIUS:
+            flash(f"Out of range ({distance:.1f}m). You must be in the classroom.", "error")
+            return redirect(url_for("student_dashboard"))
+    except ValueError:
+        flash("Invalid location data.", "error")
+        return redirect(url_for("student_dashboard"))
+
+    # 2. OTP Verification
+    otp = request.form.get("otp")
+    if not verify_otp(session_id, otp):
+        flash("Invalid or expired OTP. Manual verification requires the current code.", "error")
+        return redirect(url_for("student_dashboard"))
+
+    # 3. Create pending record
     if mark_attendance(student_id, session_id, auth_method="Manual", 
                         confidence_score=None, status="Pending Verification"):
         flash("Verification request sent! Please wait for your teacher to approve.", "success")
@@ -1020,13 +1101,13 @@ def student_logout():
     return redirect(url_for("student_login"))
 
 
-@app.route("/session/<int:session_id>/qr-token")
-def session_qr_token(session_id):
-    """Endpoint for teacher dashboard to get current dynamic QR token."""
+@app.route("/session/<int:session_id>/otp")
+def session_otp(session_id):
+    """Endpoint for teacher dashboard to get current dynamic 6-digit OTP."""
     if "teacher_id" not in session:
         return jsonify({"error": "Unauthorized"}), 401
     
-    token = get_dynamic_qr_token(session_id)
+    token = get_dynamic_otp(session_id)
     # Also return time remaining in current 10s slot
     time_remaining = 10 - (int(time.time()) % 10)
     
@@ -1086,19 +1167,81 @@ def mark_attendance_qr():
     return jsonify({"success": False, "message": "Failed to mark attendance."}), 500
 
 
-@app.route("/student/verify-qr-only", methods=["POST"])
-def verify_qr_only():
-    """Standalone QR verification for the 'Step 1' UI feedback."""
+@app.route("/student/verify-otp-only", methods=["POST"])
+def verify_otp_only():
+    """Standalone OTP verification for the 'Step 1' UI feedback."""
     if "student_id" not in session:
         return jsonify({"success": False, "message": "Login required"}), 401
     
     session_id = request.form.get("session_id")
     token = request.form.get("token")
     
-    if verify_qr_token(session_id, token):
-        return jsonify({"success": True, "message": "QR Verified! Move to Face Scan."})
+    if verify_otp(session_id, token):
+        return jsonify({"success": True, "message": "OTP Verified! Move to Proximity Check."})
     else:
-        return jsonify({"success": False, "message": "Invalid or expired QR. Try again."})
+        return jsonify({"success": False, "message": "Invalid or expired OTP. Try again."})
+
+# ── LEAVE MANAGEMENT ROUTES ───────────────────────────────────────────────────
+
+@app.route("/student/leaves")
+def student_leaves():
+    if "student_id" not in session:
+        return redirect(url_for("student_login"))
+    student_id = session["student_id"]
+    from database import get_leave_requests
+    my_leaves = get_leave_requests(student_id=student_id)
+    return render_template("student_leaves.html", student_id=student_id, my_leaves=my_leaves)
+
+@app.route("/teacher/manage-leaves")
+def teacher_manage_leaves():
+    if "teacher_id" not in session or session["teacher_id"] != "T1001":
+        flash("Unauthorized: Only Dr. Sridevi (T1001) can manage leaves.", "error")
+        return redirect(url_for("teacher_dashboard"))
+    
+    teacher_id = session["teacher_id"]
+    teacher = get_teacher(teacher_id) or DEFAULT_TEACHER
+    from database import get_leave_requests
+    leave_requests = get_leave_requests(status="Pending")
+    return render_template("teacher_leaves.html", teacher=teacher, leave_requests=leave_requests)
+
+@app.route("/student/apply-leave", methods=["POST"])
+def apply_leave():
+    """Student applies for a leave (Medical, OD, Other)."""
+    if "student_id" not in session:
+        flash("Login required to apply for leave.", "error")
+        return redirect(url_for("student_login"))
+        
+    student_id = session["student_id"]
+    from_date  = request.form.get("from_date")
+    to_date    = request.form.get("to_date")
+    reason     = request.form.get("reason")
+    other      = request.form.get("other_reason")
+    
+    if not from_date or not to_date or not reason:
+        flash("Please provide all required leave details.", "warning")
+        return redirect(url_for("student_dashboard"))
+        
+    if create_leave_request(student_id, from_date, to_date, reason, other):
+        flash("Leave request submitted successfully! Pending approval from Dr. Sridevi.", "success")
+    else:
+        flash("Failed to submit leave request. Please try again.", "error")
+        
+    return redirect(url_for("student_leaves"))
+
+@app.route("/teacher/leave-action/<int:req_id>/<action>", methods=["POST"])
+def teacher_leave_action(req_id, action):
+    """Dr. Sridevi (T1001) approves or rejects a leave request."""
+    if "teacher_id" not in session or session["teacher_id"] != "T1001":
+        flash("Unauthorized: Only Dr. Sridevi (T1001) can manage leaves.", "error")
+        return redirect(url_for("teacher_dashboard"))
+        
+    new_status = "Approved" if action == "approve" else "Rejected"
+    if update_leave_status(req_id, new_status):
+        flash(f"Leave request {new_status}!", "success")
+    else:
+        flash("Failed to update leave status.", "error")
+        
+    return redirect(url_for("teacher_manage_leaves"))
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  RUN

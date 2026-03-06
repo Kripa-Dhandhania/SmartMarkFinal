@@ -28,11 +28,11 @@
                 <a href="{{ url_for('student_my_attendance') }}" class="sd-nav-item">
                     <i class="fas fa-history"></i><span>My Attendance</span>
                 </a>
-                <a href="{{ url_for('enroll_face') }}" class="sd-nav-item">
-                    <i class="fas fa-camera"></i><span>Face Enroll</span>
-                </a>
                 <a href="{{ url_for('teacher_dashboard') }}" class="sd-nav-item">
                     <i class="fas fa-chalkboard-teacher"></i><span>Teacher Portal</span>
+                </a>
+                <a href="{{ url_for('student_leaves') }}" class="sd-nav-item">
+                    <i class="fas fa-calendar-plus"></i><span>Apply Leave</span>
                 </a>
             </nav>
             <div class="sd-nav-footer">
@@ -100,8 +100,9 @@
                                         enroll your face to mark attendance{% endif %}</p>
                                 </div>
                             </div>
-                            <form method="POST" action="{{ url_for('enroll_face') }}" style="margin:0;">
-                                <button type="submit" class="btn-enroll">
+                            <div class="face-enroll-section" style="margin:0;">
+                                <input type="hidden" id="enroll-face-data" name="face_image">
+                                <button type="button" class="btn-enroll" onclick="startFaceScan('enroll')">
                                     <i class="fas fa-camera"></i>
                                     {% if face_enrolled %}Add More Face Scans{% else %}Enroll My Face{% endif %}
                                 </button>
@@ -109,7 +110,7 @@
                                     <i class="fas fa-info-circle"></i> <strong>Tip:</strong> Scan 3-5 times from
                                     different angles for best accuracy.
                                 </p>
-                            </form>
+                            </div>
                         </div>
 
                         <!-- Active Sessions -->
@@ -154,6 +155,11 @@
                                         style="background:#fef3c7; color:#d97706; border-color:#fde68a;">
                                         <i class="fas fa-clock"></i> Pending Approval
                                     </button>
+                                    {% elif s.status == 'Excused' %}
+                                    <button class="btn-marked" disabled
+                                        style="background:#dcfce7; color:#15803d; border-color:#bbf7d0;">
+                                        <i class="fas fa-calendar-check"></i> Excused (Leave)
+                                    </button>
                                     {% else %}
                                     <button class="btn-marked" disabled><i class="fas fa-check"></i> Marked</button>
                                     {% endif %}
@@ -166,36 +172,57 @@
                                             <input type="hidden" name="longitude" class="lon-input">
 
                                             <div class="attendance-action"
-                                                style="margin-top:15px; display:flex; flex-direction:column; gap:8px;">
-                                                <!-- Hidden Token for Final Submit -->
-                                                <input type="hidden" name="qr_token" class="qr-token-input">
+                                                style="margin-top:15px; display:flex; flex-direction:column; gap:12px;">
 
-                                                <!-- Step 2: Mark Attendance (Face Scan) - Shown only after QR Success -->
-                                                <button type="submit" class="btn-mark-att hidden" disabled
-                                                    style="width: 100%; background: #94a3b8; color: white; padding: 12px; border-radius: 20px; font-weight: 700; border: none; cursor: not-allowed; display: flex; align-items:center; justify-content:center; gap:8px; transition: all 0.3s;">
-                                                    <i class="fas fa-camera"></i> Step 2: Mark Attendance (Face Scan)
-                                                </button>
-
-                                                <!-- Step 1: Mandatory QR Scan -->
-                                                <button type="button" class="btn-scan-qr" disabled
-                                                    data-session-id="{{ s.id }}"
-                                                    style="width: 100%; background: #94a3b8; color: white; padding: 12px; border-radius: 20px; font-weight: 700; border: none; cursor: not-allowed; display: flex; align-items:center; justify-content:center; gap:8px; transition: all 0.3s; font-size: 13px;">
-                                                    <i class="fas fa-satellite-dish"></i> Checking Proximity...
-                                                </button>
-
-                                                <!-- Step 1 Success Badge -->
-                                                <div class="qr-success-badge hidden"
-                                                    style="text-align:center; color:#16a34a; font-size:12px; font-weight:700; background:#f0fdf4; padding:6px; border-radius:12px; border:1px solid #bbf7d0; margin-bottom:5px;">
-                                                    <i class="fas fa-check-circle"></i> QR Verified! Proceed to Step 2.
+                                                <!-- Step 1: OTP Input -->
+                                                <div class="otp-step-area"
+                                                    style="display:flex; flex-direction:column; gap:8px;">
+                                                    <label style="font-size:12px; font-weight:700; color:#475569;">Step
+                                                        1: Enter 6-digit OTP</label>
+                                                    <div style="display:flex; gap:8px;">
+                                                        <input type="text" maxlength="6" class="otp-input"
+                                                            placeholder="000000"
+                                                            style="flex:1; padding:10px; border-radius:12px; border:2px solid #e2e8f0; font-family:monospace; font-size:16px; text-align:center; letter-spacing:4px; outline:none; background:#fff;">
+                                                        <button type="button" class="btn-verify-otp"
+                                                            data-session-id="{{ s.id }}"
+                                                            style="padding:10px 20px; border-radius:12px; background:#1e293b; color:#fff; font-weight:700; cursor:pointer; border:none; transition:all 0.2s;">
+                                                            Verify
+                                                        </button>
+                                                    </div>
                                                 </div>
+
+                                                <!-- Step 2: Proximity Check (Hidden until OTP verified) -->
+                                                <div class="proximity-step-area hidden"
+                                                    style="padding:12px; border-radius:12px; background:#f8fafc; border:1px solid #e2e8f0; display:none;">
+                                                    <div
+                                                        style="font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">
+                                                        Step 2: Proximity Check</div>
+                                                    <div class="proximity-status"
+                                                        style="font-size:13px; color:#64748b; display:flex; align-items:center; gap:8px;">
+                                                        <i class="fas fa-spinner fa-spin"></i> Checking location...
+                                                    </div>
+                                                </div>
+
+                                                <!-- Step 3: Face Scan (Hidden until Proximity OK) -->
+                                                <input type="hidden" name="qr_token" class="qr-token-input">
+                                                <input type="hidden" name="face_image" class="face-image-input">
+                                                <button type="button" class="btn-mark-att hidden" disabled
+                                                    onclick="startFaceScan('verify', this.closest('.attendance-form'))"
+                                                    style="width: 100%; background: #94a3b8; color: white; padding: 12px; border-radius: 20px; font-weight: 700; border: none; cursor: not-allowed; display: none; align-items:center; justify-content:center; gap:8px; transition: all 0.3s;">
+                                                    <i class="fas fa-camera"></i> Step 3: Mark Attendance (Face Scan)
+                                                </button>
+
                                             </div>
                                         </form>
 
                                         <!-- Fallback for Manual Verification -->
-                                        <div class="manual-fallback-area" style="margin-top:5px;">
+                                        <div class="manual-fallback-area hidden" style="margin-top:5px; display: none;">
                                             <form method="POST"
                                                 action="{{ url_for('student_request_verification', session_id=s.id) }}"
                                                 style="margin:0;">
+                                                <input type="hidden" name="latitude" class="lat-input">
+                                                <input type="hidden" name="longitude" class="lon-input">
+                                                <input type="hidden" name="otp" class="otp-manual-input">
                                                 <button type="submit" class="btn-request-manual"
                                                     style="width:100%; background:#fffbeb; color:#92400e; border:1px solid #fcd34d; padding:8px; border-radius:10px; font-size:12px; font-weight:700; cursor:pointer; transition:all 0.2s; display:flex; align-items:center; justify-content:center; gap:8px;">
                                                     <i class="fas fa-user-shield"></i> Manual Verification Fallback
@@ -219,17 +246,16 @@
                         <div class="sd-card how-it-works">
                             <div class="sd-section-title">How It Works</div>
                             <ul>
-                                <li><i class="fas fa-camera"></i> Enroll your face once — <strong
-                                        style="color:#111;">one-time setup</strong></li>
-                                <li><i class="fas fa-bolt"></i> Teacher enables a session for your class</li>
-                                <li><i class="fas fa-map-marker-alt" style="color:#3b82f6;"></i> Proximity is verified
-                                    <strong style="color:#111;">automatically</strong> in the background
-                                </li>
-                                <li><i class="fas fa-fingerprint"></i> Click <strong style="color:#111;">Mark
-                                        Attendance</strong> once enabled</li>
+                                <li><i class="fas fa-fingerprint"></i> <strong>Step 1:</strong> Enter the 6-digit OTP
+                                    shown on the teacher's dashboard.</li>
+                                <li><i class="fas fa-map-marker-alt" style="color:#3b82f6;"></i> <strong>Step
+                                        2:</strong> Proximity is verified automatically in the background.</li>
+                                <li><i class="fas fa-camera"></i> <strong>Step 3:</strong> Mark Attendance via Face Scan
+                                    once enabled.</li>
+                                <li><i class="fas fa-user-shield" style="color:#92400e;"></i> <strong>Fallback:</strong>
+                                    Use Manual Verification if recognition fails.</li>
                             </ul>
                         </div>
-
                     </div><!-- end sd-left -->
 
                     <!-- RIGHT COLUMN -->
@@ -280,6 +306,10 @@
                                             <span class="badge-location"
                                                 style="background:#e0f2fe; color:#0369a1; padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600;"><i
                                                     class="fas fa-map-marker-alt"></i> Location</span>
+                                            {% elif r.auth_method == 'Manual' %}
+                                            <span class="badge-manual"
+                                                style="background:#fffbeb; color:#92400e; border:1px solid #fcd34d; padding:4px 8px; border-radius:12px; font-size:11px; font-weight:600;"><i
+                                                    class="fas fa-user-shield"></i> Manual</span>
                                             {% else %}
                                             <span class="badge-otp"><i class="fas fa-key"></i> OTP</span>
                                             {% endif %}
@@ -303,10 +333,65 @@
             </div><!-- end sd-content-area -->
         </div><!-- end sd-main -->
 
-    </div><!-- end sd-wrapper -->
+    </div> <!-- Face Scan Modal (Browser-side Capture) -->
+    <div id="face-scan-modal" class="sd-modal hidden"
+        style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:3000; display:none; flex-direction:column; align-items:center; justify-content:center; padding:20px;">
+        <div class="sd-modal-content"
+            style="background:var(--sd-card-bg); width:100%; max-width:500px; border-radius:24px; padding:25px; text-align:center; position:relative; box-shadow: var(--sd-shadow);">
 
-    <!-- Dynamic QR Scanner Modal -->
-    <div id="sd-qr-modal" class="sd-modal hidden"
+            <button class="close-modal-btn" onclick="stopFaceScan()"
+                style="position:absolute; top:15px; right:15px; background:#f1f5f9; border:none; width:36px; height:36px; border-radius:50%; font-size:18px; cursor:pointer; color:#64748b; display:flex; align-items:center; justify-content:center;">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <h2 id="face-scan-title" style="color:var(--sd-text-primary); font-size:20px; margin-bottom:10px;">Face
+                Enrollment</h2>
+            <p id="face-scan-subtitle" style="color:var(--sd-text-secondary); font-size:14px; margin-bottom:20px;">Align
+                your face within the frame</p>
+
+            <!-- Camera Viewport -->
+            <div class="camera-container"
+                style="position:relative; width:100%; aspect-ratio:3/4; background:#000; border-radius:20px; overflow:hidden; border:3px solid var(--sd-accent);">
+                <video id="face-video" autoplay playsinline
+                    style="width:100%; height:100%; object-fit:cover; transform: scaleX(-1);"></video>
+
+                <!-- Oval Overlay Guide -->
+                <div class="face-guide"
+                    style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:70%; height:75%; border:2px dashed rgba(255,255,255,0.6); border-radius:50% / 50%; box-shadow: 0 0 0 1000px rgba(0,0,0,0.4); pointer-events:none;">
+                </div>
+
+                <div id="scan-feedback"
+                    style="position:absolute; bottom:20px; left:50%; transform:translateX(-50%); background:rgba(37, 99, 235, 0.9); color:#fff; padding:8px 20px; border-radius:20px; font-size:12px; font-weight:700; white-space:nowrap; transition:all 0.3s; opacity:0;">
+                    <i class="fas fa-spinner fa-spin"></i> Processing...
+                </div>
+            </div>
+
+            <!-- Capture Controls -->
+            <div style="margin-top:25px; display:flex; flex-direction:column; gap:12px;">
+                <button id="capture-btn" onclick="captureAndRotate()"
+                    style="width:100%; background:var(--sd-accent); color:#fff; border:none; padding:12px; border-radius:15px; font-weight:700; cursor:pointer; font-size:15px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                    <i class="fas fa-camera"></i> [C] Capture Face Scan
+                </button>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:11px; color:var(--sd-text-muted);">
+                        <i class="fas fa-keyboard"></i> Use <strong>C</strong> to Capture / <strong>Q</strong> to Quit
+                    </span>
+                    <button onclick="stopFaceScan()"
+                        style="background:none; border:none; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;">
+                        [Q] Quit
+                    </button>
+                </div>
+                <p style="font-size:11px; color:var(--sd-text-muted); margin-top:5px;">
+                    <i class="fas fa-shield-alt"></i> Data is encrypted and processed securely.
+                </p>
+            </div>
+
+            <canvas id="face-canvas" style="display:none;"></canvas>
+        </div>
+    </div>
+
+    <!-- Dynamic QR Scanner Modal - REMOVED as per instruction to replace QR logic with OTP -->
+    <!-- <div id="sd-qr-modal" class="sd-modal hidden"
         style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.9); z-index:2000; display:none; flex-direction:column; align-items:center; justify-content:center; padding:20px;">
         <div class="sd-modal-content"
             style="background:#fff; width:100%; max-width:500px; border-radius:24px; padding:25px; text-align:center; position:relative;">
@@ -331,7 +416,7 @@
                 <i class="fas fa-info-circle"></i> To prevent proxy attendance, gallery uploads are disabled.
             </p>
         </div>
-    </div>
+    </div> -->
 
     <style>
         /* #qr-scanner-modal:not(.hidden) {
@@ -342,11 +427,10 @@
     <script>
         const GLOBAL_LAT = parseFloat("{{ classroom_lat or 0 }}");
         const GLOBAL_LON = parseFloat("{{ classroom_lon or 0 }}");
-        const CLASSROOM_RADIUS = 20.0; // Updated to 20m for stricter proxy prevention
+        const CLASSROOM_RADIUS = 20.0;
 
-        // ... existing calculateDistance function ...
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371000; // Radius of earth in meters
+            const R = 6371000;
             const dLat = (lat2 - lat1) * Math.PI / 180;
             const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -357,16 +441,57 @@
         }
 
         document.addEventListener('DOMContentLoaded', function () {
-            // const scannerModal = document.getElementById('qr-scanner-modal'); // Removed
-            // const closeScanner = document.getElementById('close-scanner'); // Removed
-            // let html5QrCode = null; // Removed
-
-            // BLE + OTP Logic Removed
-            // Step 1/2 manual logic removed - now automatic below in watchPosition
-
             const distanceMeter = document.getElementById('distance-meter');
             const distanceVal = document.getElementById('distance-val');
             let lastKnownPos = null;
+            let currentScanningForm = null;
+            let faceStream = null;
+            let currentFaceMode = 'enroll';
+            let activeAttendanceForm = null;
+
+            function checkProximityForForm(form, lat, lon) {
+                const sessionItem = form.closest('.session-item');
+                const proximityArea = form.querySelector('.proximity-step-area');
+                const proximityStatus = proximityArea.querySelector('.proximity-status');
+                const faceBtn = form.querySelector('.btn-mark-att');
+
+                const targetLat = parseFloat(sessionItem.dataset.lat) || GLOBAL_LAT;
+                const targetLon = parseFloat(sessionItem.dataset.lon) || GLOBAL_LON;
+                const dist = calculateDistance(lat, lon, targetLat, targetLon);
+
+                if (sessionItem === document.querySelector('.session-item')) {
+                    distanceVal.innerText = dist.toFixed(1) + 'm away';
+                    distanceMeter.style.background = dist <= CLASSROOM_RADIUS ? '#f0fdf4' : '#fef2f2';
+                    distanceMeter.style.color = dist <= CLASSROOM_RADIUS ? '#16a34a' : '#dc2626';
+                    distanceMeter.style.borderColor = dist <= CLASSROOM_RADIUS ? '#bbf7d0' : '#fecaca';
+                }
+
+                if (dist <= CLASSROOM_RADIUS) {
+                    form.querySelector('.lat-input').value = lat;
+                    form.querySelector('.lon-input').value = lon;
+
+                    // Also sync to manual fallback if present
+                    const manualForm = form.parentElement.querySelector('.manual-fallback-area');
+                    if (manualForm) {
+                        const mLat = manualForm.querySelector('.lat-input');
+                        const mLon = manualForm.querySelector('.lon-input');
+                        if (mLat) mLat.value = lat;
+                        if (mLon) mLon.value = lon;
+                    }
+
+                    proximityStatus.innerHTML = '<i class="fas fa-check-circle" style="color:#16a34a;"></i> In Range (' + dist.toFixed(0) + 'm)';
+                    faceBtn.style.display = 'flex';
+                    faceBtn.classList.remove('hidden');
+                    faceBtn.disabled = false;
+                    faceBtn.style.background = '#1e293b';
+                    faceBtn.style.cursor = 'pointer';
+                } else {
+                    proximityStatus.innerHTML = '<i class="fas fa-times-circle" style="color:#dc2626;"></i> Out of Range (' + dist.toFixed(0) + 'm)';
+                    faceBtn.classList.add('hidden');
+                    faceBtn.style.display = 'none';
+                    faceBtn.disabled = true;
+                }
+            }
 
             if (navigator.geolocation) {
                 distanceMeter.classList.remove('hidden');
@@ -375,124 +500,183 @@
                     const lat = pos.coords.latitude;
                     const lon = pos.coords.longitude;
 
-                    // Update all active attendance buttons
-                    document.querySelectorAll('.attendance-form').forEach(form => {
-                        const sessionItem = form.closest('.session-item');
-                        const btn = form.querySelector('.btn-mark-att');
-                        if (!sessionItem || !btn) return;
-
-                        const targetLat = parseFloat(sessionItem.dataset.lat) || GLOBAL_LAT;
-                        const targetLon = parseFloat(sessionItem.dataset.lon) || GLOBAL_LON;
+                    // Update main distance meter
+                    const firstSession = document.querySelector('.session-item');
+                    if (firstSession) {
+                        const targetLat = parseFloat(firstSession.dataset.lat) || GLOBAL_LAT;
+                        const targetLon = parseFloat(firstSession.dataset.lon) || GLOBAL_LON;
                         const dist = calculateDistance(lat, lon, targetLat, targetLon);
+                        distanceVal.innerText = dist.toFixed(1) + 'm away';
+                        distanceMeter.style.background = dist <= CLASSROOM_RADIUS ? '#f0fdf4' : '#fef2f2';
+                        distanceMeter.style.color = dist <= CLASSROOM_RADIUS ? '#16a34a' : '#dc2626';
+                        distanceMeter.style.borderColor = dist <= CLASSROOM_RADIUS ? '#bbf7d0' : '#fecaca';
+                    }
 
-                        // Update global distance meter UI (using first session for label)
-                        if (sessionItem === document.querySelector('.session-item')) {
-                            distanceVal.innerText = dist.toFixed(1) + 'm away';
-                            distanceMeter.style.background = dist <= CLASSROOM_RADIUS ? '#f0fdf4' : '#fef2f2';
-                            distanceMeter.style.color = dist <= CLASSROOM_RADIUS ? '#16a34a' : '#dc2626';
-                            distanceMeter.style.borderColor = dist <= CLASSROOM_RADIUS ? '#bbf7d0' : '#fecaca';
-                        }
-
-                        // Auto-enable Step 1 (QR Scan)
-                        if (dist <= CLASSROOM_RADIUS) {
-                            form.querySelector('.lat-input').value = lat;
-                            form.querySelector('.lon-input').value = lon;
-
-                            const scanBtn = form.querySelector('.btn-scan-qr');
-                            if (scanBtn && !scanBtn.dataset.qrVerified) {
-                                scanBtn.disabled = false;
-                                scanBtn.style.background = '#1e293b';
-                                scanBtn.style.cursor = 'pointer';
-                                scanBtn.innerHTML = '<i class="fas fa-qrcode"></i> Step 1: Scan Teacher\'s QR';
-                                scanBtn.classList.remove('hidden');
-                            }
-                        } else {
-                            const scanBtn = form.querySelector('.btn-scan-qr');
-                            if (scanBtn) {
-                                scanBtn.disabled = true;
-                                scanBtn.style.background = '#94a3b8';
-                                scanBtn.style.cursor = 'not-allowed';
-                                scanBtn.innerHTML = '<i class="fas fa-satellite-dish"></i> Please enter classroom';
-                            }
-                            // Also hide Step 2 if out of range
-                            form.querySelector('.btn-mark-att').classList.add('hidden');
+                    // For any active forms that have completed Step 1
+                    document.querySelectorAll('.attendance-form').forEach(form => {
+                        if (form.dataset.otpVerified === "true") {
+                            checkProximityForForm(form, lat, lon);
                         }
                     });
                 }, (err) => {
                     console.error("Geo Error", err);
-                    document.querySelectorAll('.btn-scan-qr').forEach(btn => {
-                        btn.innerHTML = '<i class="fas fa-exclamation-triangle"></i> Enable Location';
-                    });
-                }, { enableHighAccuracy: false, timeout: 30000, maximumAge: 60000 });
+                }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
             }
 
-            // ── QR Scanner Logic ───────────────────────────────────────────────
-            let html5QrCode = null;
-            let currentScanningForm = null;
+            // ── OTP Verify Logic ──
+            document.querySelectorAll('.btn-verify-otp').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const form = btn.closest('.attendance-form');
+                    const input = form.querySelector('.otp-input');
+                    const otp = input.value.trim();
+                    const sessionId = btn.dataset.sessionId;
 
-            document.querySelectorAll('.btn-scan-qr').forEach(btn => {
-                btn.addEventListener('click', () => {
-                    currentScanningForm = btn.closest('.attendance-form');
-                    const modal = document.getElementById('sd-qr-modal');
-                    modal.style.display = 'flex';
-                    modal.classList.remove('hidden');
+                    if (!otp || otp.length < 6) {
+                        alert("Please enter a valid 6-digit OTP.");
+                        return;
+                    }
 
-                    const status = document.getElementById('qr-status');
-                    status.style.display = 'none';
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-                    html5QrCode = new Html5Qrcode("qr-reader");
-                    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+                    const fd = new FormData();
+                    fd.append('session_id', sessionId);
+                    fd.append('token', otp);
 
-                    html5QrCode.start({ facingMode: "environment" }, config, (decodedText) => {
-                        // QR Scanned! Now verify it without marking yet
-                        status.style.display = 'block';
-                        status.style.background = '#f0fdf4';
-                        status.style.color = '#16a34a';
-                        status.innerText = "Verifying QR...";
+                    try {
+                        const res = await fetch('/student/verify-otp-only', { method: 'POST', body: fd });
+                        const data = await res.json();
 
-                        const fd = new FormData();
-                        fd.append('session_id', btn.dataset.sessionId);
-                        fd.append('token', decodedText);
+                        if (data.success) {
+                            form.dataset.otpVerified = "true";
+                            form.querySelector('.qr-token-input').value = otp;
 
-                        fetch('/student/verify-qr-only', { method: 'POST', body: fd })
-                            .then(r => r.json())
-                            .then(data => {
-                                if (data.success) {
-                                    html5QrCode.stop().then(() => {
-                                        modal.style.display = 'none';
+                            // Also set it for manual fallback
+                            const manualOtpInput = form.parentElement.querySelector('.otp-manual-input');
+                            if (manualOtpInput) manualOtpInput.value = otp;
 
-                                        // Update UI for the specific session
-                                        const scanBtn = currentScanningForm.querySelector('.btn-scan-qr');
-                                        const faceBtn = currentScanningForm.querySelector('.btn-mark-att');
-                                        const badge = currentScanningForm.querySelector('.qr-success-badge');
-                                        const tokenInput = currentScanningForm.querySelector('.qr-token-input');
+                            // Hide Step 1 Area
+                            form.querySelector('.otp-step-area').style.display = 'none';
 
-                                        tokenInput.value = decodedText;
-                                        scanBtn.classList.add('hidden');
-                                        scanBtn.dataset.qrVerified = "true";
+                            // Show Step 2 Area
+                            const proximityArea = form.querySelector('.proximity-step-area');
+                            proximityArea.style.display = 'block';
+                            proximityArea.classList.remove('hidden');
 
-                                        badge.classList.remove('hidden');
+                            // Show Manual Fallback Area (it now requires OTP & Location)
+                            const manualArea = form.parentElement.querySelector('.manual-fallback-area');
+                            if (manualArea) {
+                                manualArea.style.display = 'block';
+                                manualArea.classList.remove('hidden');
+                            }
 
-                                        faceBtn.classList.remove('hidden');
-                                        faceBtn.disabled = false;
-                                        faceBtn.style.background = '#1e293b';
-                                        faceBtn.style.cursor = 'pointer';
-                                    });
-                                } else {
-                                    status.style.background = '#fef2f2';
-                                    status.style.color = '#dc2626';
-                                    status.innerText = data.message;
-                                }
-                            });
-                    });
+                            if (lastKnownPos) {
+                                checkProximityForForm(form, lastKnownPos.coords.latitude, lastKnownPos.coords.longitude);
+                            }
+                        } else {
+                            alert(data.message);
+                        }
+                    } catch (err) {
+                        alert("Error contacting server.");
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerHTML = 'Verify';
+                    }
                 });
             });
 
-            document.getElementById('close-sd-qr-modal')?.addEventListener('click', () => {
-                const modal = document.getElementById('sd-qr-modal');
-                modal.style.display = 'none';
-                if (html5QrCode && html5QrCode.isScanning) html5QrCode.stop();
+            // ── Face Scan Logic ──
+            window.startFaceScan = async function (mode, form = null) {
+                currentFaceMode = mode;
+                activeAttendanceForm = form;
+                const modal = document.getElementById('face-scan-modal');
+                const video = document.getElementById('face-video');
+                document.getElementById('face-scan-title').innerText = mode === 'enroll' ? 'Face Enrollment' : 'Identity Verification';
+                document.getElementById('face-scan-subtitle').innerText = mode === 'enroll' ? 'Scan to register your face' : 'Scan to confirm your identity';
+                modal.style.display = 'flex';
+                modal.classList.remove('hidden');
+
+                try {
+                    faceStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }
+                    });
+                    video.srcObject = faceStream;
+                } catch (err) {
+                    alert("Could not access camera. Please allow permissions.");
+                    stopFaceScan();
+                }
+            };
+
+            window.stopFaceScan = function () {
+                document.getElementById('face-scan-modal').style.display = 'none';
+                if (faceStream) {
+                    faceStream.getTracks().forEach(track => track.stop());
+                    faceStream = null;
+                }
+            };
+
+            // Keyboard Shortcuts for Camera (C to capture, Q to quit)
+            document.addEventListener('keydown', function (e) {
+                const modal = document.getElementById('face-scan-modal');
+                if (modal.style.display === 'flex' || modal.style.display === 'block') {
+                    if (e.key.toLowerCase() === 'c') {
+                        e.preventDefault();
+                        captureAndRotate();
+                    } else if (e.key.toLowerCase() === 'q') {
+                        e.preventDefault();
+                        stopFaceScan();
+                    }
+                }
             });
+
+            window.captureAndRotate = function () {
+                const video = document.getElementById('face-video');
+                const canvas = document.getElementById('face-canvas');
+                const feedback = document.getElementById('scan-feedback');
+                const captureBtn = document.getElementById('capture-btn');
+
+                if (!video.srcObject) return;
+
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.translate(canvas.width, 0);
+                ctx.scale(-1, 1);
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const dataURL = canvas.toDataURL('image/jpeg', 0.8);
+
+                feedback.style.opacity = '1';
+                captureBtn.disabled = true;
+                captureBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+
+                if (currentFaceMode === 'enroll') {
+                    const fd = new FormData();
+                    fd.append('face_image', dataURL);
+                    fetch("{{ url_for('enroll_face') }}", { method: 'POST', body: fd })
+                        .then(r => r.redirected ? window.location.href = r.url : r.json())
+                        .then(data => {
+                            if (data && !data.success) {
+                                alert(data.message || "Enrollment failed.");
+                                stopFaceScan();
+                            }
+                        }).catch(stopFaceScan);
+                } else {
+                    if (activeAttendanceForm) {
+                        activeAttendanceForm.querySelector('.face-image-input').value = dataURL;
+                        activeAttendanceForm.submit();
+                    }
+                }
+            };
+
+            window.toggleOtherReason = function (select) {
+                const otherGroup = document.getElementById('other-reason-group');
+                if (select.value === 'Other') {
+                    otherGroup.style.display = 'block';
+                } else {
+                    otherGroup.style.display = 'none';
+                }
+            };
+
         });
     </script>
 

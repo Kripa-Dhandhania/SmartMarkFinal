@@ -69,5 +69,5 @@ A comprehensive, Flask-based attendance management system that integrates face r
 - `inspect_db.py` / `deep_inspect.py`: Database inspection tools.
 - `cleanup_db.py`: Utilty to reset or clean database records.
 
-## 📄 License
+## License
 This project is licensed under the MIT License.

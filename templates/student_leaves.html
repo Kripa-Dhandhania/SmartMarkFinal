@@ -21,21 +21,21 @@
                 <span class="sd-sidebar-brand">SmartMark</span>
             </div>
             <nav class="sd-nav">
-                <a href="{{ url_for('student_dashboard') }}" class="sd-nav-item">
+                <a href="{{ url_for('student_dashboard', student_id=student_id) }}" class="sd-nav-item">
                     <i class="fas fa-home"></i><span>Dashboard</span>
                 </a>
-                <a href="{{ url_for('student_my_attendance') }}" class="sd-nav-item">
+                <a href="{{ url_for('student_my_attendance', student_id=student_id) }}" class="sd-nav-item">
                     <i class="fas fa-history"></i><span>My Attendance</span>
                 </a>
                 <a href="{{ url_for('teacher_dashboard') }}" class="sd-nav-item">
                     <i class="fas fa-chalkboard-teacher"></i><span>Teacher Portal</span>
                 </a>
-                <a href="{{ url_for('student_leaves') }}" class="sd-nav-item active">
+                <a href="{{ url_for('student_leaves', student_id=student_id) }}" class="sd-nav-item active">
                     <i class="fas fa-calendar-plus"></i><span>Apply Leave</span>
                 </a>
             </nav>
             <div class="sd-nav-footer">
-                <a href="{{ url_for('student_logout') }}" class="sd-logout-link">
+                <a href="{{ url_for('student_logout', student_id=student_id) }}" class="sd-logout-link">
                     <i class="fas fa-sign-out-alt"></i><span>Logout</span>
                 </a>
             </div>
@@ -88,7 +88,7 @@
                             <div class="sd-card-header">
                                 <h2><i class="fas fa-calendar-plus" style="color:#6366f1;"></i> Apply for Leave</h2>
                             </div>
-                            <form action="{{ url_for('apply_leave') }}" method="POST" class="leave-form"
+                            <form action="{{ url_for('apply_leave', student_id=student_id) }}" method="POST" class="leave-form"
                                 style="display:flex; flex-direction:column; gap:15px; margin-top:10px;">
                                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
                                     <div class="form-group">

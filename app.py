@@ -806,9 +806,16 @@ def student_login():
         student = get_student(student_id)
         if student and student.get('password_hash'):
             if check_password_hash(student['password_hash'], password):
+                # Maintain a list of logged-in student IDs to allow multi-tab testing in one browser
+                if 'logged_in_students' not in session:
+                    session['logged_in_students'] = []
+                if student_id not in session['logged_in_students']:
+                    session['logged_in_students'].append(student_id)
+                
+                # Still store the 'latest' for backward compatibility or simple redirects
                 session["student_id"] = student_id
                 session["student_email"] = student['email']
-                return redirect(url_for("student_dashboard"))
+                return redirect(url_for("student_dashboard", student_id=student_id))
             else:
                 flash("Invalid password.", "error")
         elif student:
@@ -843,10 +850,16 @@ def student_register():
             from database import update_student_password
             update_student_email(student_id, email)
             update_student_password(student_id, password_hash)
+            
+            if 'logged_in_students' not in session:
+                session['logged_in_students'] = []
+            if student_id not in session['logged_in_students']:
+                session['logged_in_students'].append(student_id)
+                
             session["student_id"] = student_id
             session["student_email"] = email
             flash(f"Welcome, {name}! Registration successful.", "success")
-            return redirect(url_for("student_dashboard"))
+            return redirect(url_for("student_dashboard", student_id=student_id))
         else:
             flash("Registration failed. Please try again.", "error")
             return redirect(url_for("student_register"))
@@ -854,12 +867,11 @@ def student_register():
     return render_template("student_login.html", register=True)
 
 
-@app.route("/student/dashboard")
-def student_dashboard():
-    if "student_id" not in session:
+@app.route("/student/<student_id>/dashboard")
+def student_dashboard(student_id):
+    # Security check: Ensure this student_id is logged in in this session
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         return redirect(url_for("student_login"))
-
-    student_id   = session["student_id"]
     face_enrolled = check_face_enrolled(student_id)
 
     active_sessions = get_active_sessions()
@@ -884,7 +896,7 @@ def student_dashboard():
             "longitude":     s["longitude"],
             "already_marked": att_status is not None,
             "status":        att_status,
-            "otp_verified":  session.get(f"otp_verified_{s['id']}", False),
+            "otp_verified":  session.get(f"otp_verified_{student_id}_{s['id']}", False),
             "is_active":     s.get("is_active", 1) # Support checking if it's the requested but inactive one
         })
 
@@ -903,15 +915,13 @@ def student_dashboard():
 
 
 
-@app.route("/student/enroll-face", methods=["POST"])
-def enroll_face():
+@app.route("/student/<student_id>/enroll-face", methods=["POST"])
+def enroll_face(student_id):
     global recognizer, label_map
 
-    if "student_id" not in session:
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         flash("Login required.", "error")
         return redirect(url_for("student_login"))
-
-    student_id = session["student_id"]
     
     # Try browser-side capture data first
     face_base64 = request.form.get("face_image")
@@ -939,14 +949,12 @@ def enroll_face():
     return redirect(url_for("student_dashboard"))
 
 
-@app.route("/student/mark-attendance/<int:session_id>", methods=["POST"])
-def mark_attendance_route(session_id):
+@app.route("/student/<student_id>/mark-attendance/<int:session_id>", methods=["POST"])
+def mark_attendance_route(student_id, session_id):
     global recognizer, label_map
 
-    if "student_id" not in session:
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         return redirect(url_for("student_login"))
-
-    student_id = session["student_id"]
 
     # Validate session is still active
     att_session = get_session(session_id)
@@ -982,12 +990,12 @@ def mark_attendance_route(session_id):
             
         # STEP 2: Persistent OTP Verification
         qr_token = request.form.get("qr_token")
-        otp_verified_in_session = session.get(f"otp_verified_{session_id}")
+        otp_verified_in_session = session.get(f"otp_verified_{student_id}_{session_id}")
         
         # If not verified in current session, try to verify the token provided
         if not otp_verified_in_session:
             if qr_token and verify_otp(session_id, qr_token):
-                session[f"otp_verified_{session_id}"] = True
+                session[f"otp_verified_{student_id}_{session_id}"] = True
             else:
                 flash("OTP verification failed or expired. Please enter the current code from the teacher's screen.", "error")
                 return redirect(url_for("student_dashboard", request_verification=session_id))
@@ -1022,46 +1030,44 @@ def mark_attendance_route(session_id):
                 matched_id, confidence = recognize_face(recognizer, label_map, face)
             else:
                 flash("Face recognition model is not initialized. Please enroll your face.", "error")
-                return redirect(url_for("student_dashboard"))
+                return redirect(url_for("student_dashboard", student_id=student_id))
 
         # Handle Match
         if matched_id:
             if str(matched_id) == str(student_id):
                 if mark_attendance(student_id, session_id, auth_method="Face", confidence_score=round(confidence, 2)):
                     flash(f"Face recognized! Attendance marked for {att_session['subject']}.", "success")
-                    return redirect(url_for("attendance_confirmed", session_id=session_id, method="Face"))
+                    return redirect(url_for("attendance_confirmed", student_id=student_id, session_id=session_id, method="Face"))
             else:
                 # Recognized as someone else
                 flash(f"Face recognized as a different student. Please try again or request manual verification.", "warning")
                 print(f"[FACE] Mismatch: Student {student_id} scanned as {matched_id} (conf: {confidence:.2f})")
-                return redirect(url_for("student_dashboard", request_verification=session_id))
+                return redirect(url_for("student_dashboard", student_id=student_id, request_verification=session_id))
         
         # No Match at all
         flash("Face not recognized. Tip: Add more face scans from different angles to improve accuracy.", "warning")
-        return redirect(url_for("student_dashboard", request_verification=session_id))
+        return redirect(url_for("student_dashboard", student_id=student_id, request_verification=session_id))
             
     except ValueError:
         flash("Invalid location data received.", "error")
-        return redirect(url_for("student_dashboard"))
+        return redirect(url_for("student_dashboard", student_id=student_id))
 
 
-@app.route("/student/request-verification/<int:session_id>", methods=["POST"])
-def student_request_verification(session_id):
-    if "student_id" not in session:
+@app.route("/student/<student_id>/request-verification/<int:session_id>", methods=["POST"])
+def student_request_verification(student_id, session_id):
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         return redirect(url_for("student_login"))
-    
-    student_id = session["student_id"]
     att_session = get_session(session_id)
     if not att_session or not att_session.get("is_active"):
         flash("Session not found or inactive.", "error")
-        return redirect(url_for("student_dashboard"))
+        return redirect(url_for("student_dashboard", student_id=student_id))
 
     # 1. Location Verification
     lat_str = request.form.get("latitude")
     lon_str = request.form.get("longitude")
     if not lat_str or not lon_str:
         flash("Location access is required for manual verification.", "error")
-        return redirect(url_for("student_dashboard"))
+        return redirect(url_for("student_dashboard", student_id=student_id))
 
     try:
         student_lat = float(lat_str)
@@ -1072,19 +1078,19 @@ def student_request_verification(session_id):
         
         if distance > CLASSROOM_RADIUS:
             flash(f"Out of range ({distance:.1f}m). You must be in the classroom.", "error")
-            return redirect(url_for("student_dashboard"))
+            return redirect(url_for("student_dashboard", student_id=student_id))
     except ValueError:
         flash("Invalid location data.", "error")
-        return redirect(url_for("student_dashboard"))
+        return redirect(url_for("student_dashboard", student_id=student_id))
 
     # 2. OTP Verification (Check session first)
     otp = request.form.get("otp")
-    if not session.get(f"otp_verified_{session_id}"):
+    if not session.get(f"otp_verified_{student_id}_{session_id}"):
         if otp and verify_otp(session_id, otp):
-             session[f"otp_verified_{session_id}"] = True
+             session[f"otp_verified_{student_id}_{session_id}"] = True
         else:
             flash("Invalid or expired OTP. Manual verification requires the current code.", "error")
-            return redirect(url_for("student_dashboard", request_verification=session_id))
+            return redirect(url_for("student_dashboard", student_id=student_id, request_verification=session_id))
 
     # 3. Create pending record
     if mark_attendance(student_id, session_id, auth_method="Manual", 
@@ -1093,17 +1099,15 @@ def student_request_verification(session_id):
     else:
         flash("Request already sent or attendance already marked.", "warning")
         
-    return redirect(url_for("student_dashboard"))
+    return redirect(url_for("student_dashboard", student_id=student_id))
 
 
 
 
-@app.route("/student/confirmed")
-def attendance_confirmed():
-    if "student_id" not in session:
+@app.route("/student/<student_id>/confirmed")
+def attendance_confirmed(student_id):
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         return redirect(url_for("student_login"))
-
-    student_id  = session["student_id"]
     method      = request.args.get("method", "Unknown")
     session_id  = request.args.get("session_id")
 
@@ -1117,12 +1121,10 @@ def attendance_confirmed():
                            att_session=att_session)
 
 
-@app.route("/student/my-attendance")
-def student_my_attendance():
-    if "student_id" not in session:
+@app.route("/student/<student_id>/my-attendance")
+def student_my_attendance(student_id):
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         return redirect(url_for("student_login"))
-
-    student_id = session["student_id"]
     summary    = get_student_subject_summary(student_id)
     all_records = get_attendance_records(student_id=student_id)
 
@@ -1135,9 +1137,10 @@ def student_my_attendance():
     )
 
 
-@app.route("/student/logout")
-def student_logout():
-    session.clear()
+@app.route("/student/<student_id>/logout")
+def student_logout(student_id):
+    if 'logged_in_students' in session and student_id in session['logged_in_students']:
+        session['logged_in_students'].remove(student_id)
     return redirect(url_for("student_login"))
 
 
@@ -1156,12 +1159,11 @@ def session_otp(session_id):
         "expires_in": time_remaining
     })
 
-@app.route("/student/mark-attendance-qr", methods=["POST"])
-def mark_attendance_qr():
-    if "student_id" not in session:
+@app.route("/student/<student_id>/mark-attendance-qr", methods=["POST"])
+def mark_attendance_qr(student_id):
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         return jsonify({"success": False, "message": "Login required"}), 401
     
-    student_id = session["student_id"]
     session_id = request.form.get("session_id")
     scanned_token = request.form.get("token")
     lat_str = request.form.get("latitude")
@@ -1207,28 +1209,27 @@ def mark_attendance_qr():
     return jsonify({"success": False, "message": "Failed to mark attendance."}), 500
 
 
-@app.route("/student/verify-otp-only", methods=["POST"])
-def verify_otp_only():
+@app.route("/student/<student_id>/verify-otp-only", methods=["POST"])
+def verify_otp_only(student_id):
     """Standalone OTP verification for the 'Step 1' UI feedback. Sets persistent session flag."""
-    if "student_id" not in session:
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         return jsonify({"success": False, "message": "Login required"}), 401
     
     session_id = request.form.get("session_id", type=int)
     token = request.form.get("token")
     
     if verify_otp(session_id, token):
-        session[f"otp_verified_{session_id}"] = True
+        session[f"otp_verified_{student_id}_{session_id}"] = True
         return jsonify({"success": True, "message": "OTP Verified! Move to Proximity Check."})
     else:
         return jsonify({"success": False, "message": "Invalid or expired OTP. Try again."})
 
 # ── LEAVE MANAGEMENT ROUTES ───────────────────────────────────────────────────
 
-@app.route("/student/leaves")
-def student_leaves():
-    if "student_id" not in session:
+@app.route("/student/<student_id>/leaves")
+def student_leaves(student_id):
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         return redirect(url_for("student_login"))
-    student_id = session["student_id"]
     from database import get_leave_requests
     my_leaves = get_leave_requests(student_id=student_id)
     return render_template("student_leaves.html", student_id=student_id, my_leaves=my_leaves)
@@ -1245,14 +1246,12 @@ def teacher_manage_leaves():
     leave_requests = get_leave_requests()
     return render_template("teacher_leaves.html", teacher=teacher, leave_requests=leave_requests)
 
-@app.route("/student/apply-leave", methods=["POST"])
-def apply_leave():
+@app.route("/student/<student_id>/apply-leave", methods=["POST"])
+def apply_leave(student_id):
     """Student applies for a leave (Medical, OD, Other)."""
-    if "student_id" not in session:
+    if 'logged_in_students' not in session or student_id not in session['logged_in_students']:
         flash("Login required to apply for leave.", "error")
         return redirect(url_for("student_login"))
-        
-    student_id = session["student_id"]
     from_date  = request.form.get("from_date")
     to_date    = request.form.get("to_date")
     reason     = request.form.get("reason")
@@ -1260,18 +1259,18 @@ def apply_leave():
     
     if not from_date or not to_date or not reason:
         flash("Please provide all required leave details.", "warning")
-        return redirect(url_for("student_dashboard"))
+        return redirect(url_for("student_dashboard", student_id=student_id))
         
     if from_date > to_date:
         flash("Invalid date range: 'From Date' must be before or equal to 'To Date'.", "error")
-        return redirect(url_for("student_leaves"))
+        return redirect(url_for("student_leaves", student_id=student_id))
         
     if create_leave_request(student_id, from_date, to_date, reason, other):
         flash("Leave request submitted successfully! Pending approval from Dr. Sridevi.", "success")
     else:
         flash("Failed to submit leave request. Please try again.", "error")
         
-    return redirect(url_for("student_leaves"))
+    return redirect(url_for("student_leaves", student_id=student_id))
 
 @app.route("/teacher/leave-action/<int:req_id>/<action>", methods=["POST"])
 def teacher_leave_action(req_id, action):

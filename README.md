@@ -2,7 +2,7 @@
 
 A comprehensive, Flask-based attendance management system that integrates face recognition, OTP verification, and geolocation tracking for secure and efficient attendance tracking.
 
-## 🚀 Features
+## Features
 
 ### For Teachers
 - **Session Management**: Start and close attendance sessions with customizable TTL (Time To Live).
@@ -18,7 +18,7 @@ A comprehensive, Flask-based attendance management system that integrates face r
 - **Personal Dashboard**: Track attendance history by subject and view individual statistics.
 - **Leave Application**: Apply for leaves directly through the portal.
 
-## 🛠️ Technology Stack
+## Technology Stack
 - **Backend**: Flask (Python)
 - **Database**: SQLite (with automated migrations)
 - **Computer Vision**: OpenCV (Face detection and recognition)
@@ -26,11 +26,11 @@ A comprehensive, Flask-based attendance management system that integrates face r
 - **Reporting**: Openpyxl (Excel), CSV
 - **Security**: Werkzeug password hashing, TOTP-style dynamic OTP
 
-## 📋 Prerequisites
+## Prerequisites
 - Python 3.10+
 - Camera access (for face recognition)
 
-## ⚙️ Installation & Setup
+## Installation & Setup
 
 1. **Clone the repository**:
    ```bash
@@ -63,7 +63,7 @@ A comprehensive, Flask-based attendance management system that integrates face r
    ```
    Access the app at `http://127.0.0.1:5000`.
 
-## 🧪 Testing and Utilities
+## Testing and Utilities
 - `simulate_attendance.py`: Script to generate mock attendance data.
 - `verify_security.py`: Security checks for the system.
 - `inspect_db.py` / `deep_inspect.py`: Database inspection tools.

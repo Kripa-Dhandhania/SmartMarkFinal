@@ -19,7 +19,8 @@ from database import (
 )
 
 CONFIDENCE_THRESHOLD = 85  # Adjusted from 75 to improve recognition reliability
-DATASET_DIR = "datasets"
+# Use absolute path for dataset directory to avoid issues with different working directories
+DATASET_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "datasets")
 
 
 def get_face_cascade():

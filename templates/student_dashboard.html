@@ -167,16 +167,17 @@
                                     <div style="display:flex; flex-direction:column; gap:6px;">
                                         <form method="POST"
                                             action="{{ url_for('mark_attendance_route', session_id=s.id) }}"
-                                            style="margin:0;" class="attendance-form">
+                                            style="margin:0;" class="attendance-form"
+                                            data-otp-verified="{{ 'true' if s.otp_verified else 'false' }}">
                                             <input type="hidden" name="latitude" class="lat-input">
                                             <input type="hidden" name="longitude" class="lon-input">
 
                                             <div class="attendance-action"
                                                 style="margin-top:15px; display:flex; flex-direction:column; gap:12px;">
 
-                                                <!-- Step 1: OTP Input -->
+                                                <!-- Step 1: OTP Input (Hidden if already verified) -->
                                                 <div class="otp-step-area"
-                                                    style="display:flex; flex-direction:column; gap:8px;">
+                                                    style="display:{{ 'none' if s.otp_verified else 'flex' }}; flex-direction:column; gap:8px;">
                                                     <label style="font-size:12px; font-weight:700; color:#475569;">Step
                                                         1: Enter 6-digit OTP</label>
                                                     <div style="display:flex; gap:8px;">
@@ -191,9 +192,9 @@
                                                     </div>
                                                 </div>
 
-                                                <!-- Step 2: Proximity Check (Hidden until OTP verified) -->
-                                                <div class="proximity-step-area hidden"
-                                                    style="padding:12px; border-radius:12px; background:#f8fafc; border:1px solid #e2e8f0; display:none;">
+                                                <!-- Step 2: Proximity Check (Visible if OTP verified) -->
+                                                <div class="proximity-step-area {{ 'hidden' if not s.otp_verified }}"
+                                                    style="padding:12px; border-radius:12px; background:#f8fafc; border:1px solid #e2e8f0; display:{{ 'block' if s.otp_verified else 'none' }};">
                                                     <div
                                                         style="font-size:12px; font-weight:700; color:#475569; margin-bottom:4px;">
                                                         Step 2: Proximity Check</div>
@@ -215,8 +216,9 @@
                                             </div>
                                         </form>
 
-                                        <!-- Fallback for Manual Verification -->
-                                        <div class="manual-fallback-area hidden" style="margin-top:5px; display: none;">
+                                        <!-- Fallback for Manual Verification (Enabled if OTP verified) -->
+                                        <div class="manual-fallback-area {{ 'hidden' if not s.otp_verified }}" 
+                                             style="margin-top:5px; display: {{ 'block' if s.otp_verified else 'none' }};">
                                             <form method="POST"
                                                 action="{{ url_for('student_request_verification', session_id=s.id) }}"
                                                 style="margin:0;">
@@ -228,7 +230,7 @@
                                                     <i class="fas fa-user-shield"></i> Manual Verification Fallback
                                                 </button>
                                             </form>
-                                        </div>
+                                        </div>          </div>
                                     </div>
                                     {% endif %}
                                 </div>
@@ -448,6 +450,7 @@
             let faceStream = null;
             let currentFaceMode = 'enroll';
             let activeAttendanceForm = null;
+            let geoWatcher = null;
 
             function checkProximityForForm(form, lat, lon) {
                 const sessionItem = form.closest('.session-item');
@@ -493,9 +496,16 @@
                 }
             }
 
-            if (navigator.geolocation) {
-                distanceMeter.classList.remove('hidden');
-                navigator.geolocation.watchPosition((pos) => {
+            function startGeoWatch(highAccuracy = true) {
+                if (geoWatcher) navigator.geolocation.clearWatch(geoWatcher);
+
+                const options = {
+                    enableHighAccuracy: highAccuracy,
+                    timeout: 5000,
+                    maximumAge: 60000 // Reuse location from last 60 seconds
+                };
+
+                geoWatcher = navigator.geolocation.watchPosition((pos) => {
                     lastKnownPos = pos;
                     const lat = pos.coords.latitude;
                     const lon = pos.coords.longitude;
@@ -519,8 +529,18 @@
                         }
                     });
                 }, (err) => {
-                    console.error("Geo Error", err);
-                }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+                    console.warn(`Geolocation error (${err.code}): ${err.message}`);
+                    // Fallback to low accuracy if high accuracy times out/fails on a laptop
+                    if (highAccuracy && (err.code === 3 || err.code === 1)) {
+                        console.log("Retrying with lower accuracy...");
+                        startGeoWatch(false);
+                    }
+                }, options);
+            }
+
+            if (navigator.geolocation) {
+                distanceMeter.classList.remove('hidden');
+                startGeoWatch(true);
             }
 
             // ── OTP Verify Logic ──

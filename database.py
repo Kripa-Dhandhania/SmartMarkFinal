@@ -598,9 +598,13 @@ def check_attendance_for_session(student_id, session_id):
             return result[0]
             
         # 2. Fallback: Check for approved leave on the session date
-        cursor.execute('SELECT date FROM attendance_sessions WHERE id = ?', (session_id,))
+        cursor.execute('SELECT date, is_active FROM attendance_sessions WHERE id = ?', (session_id,))
         sess = cursor.fetchone()
         if sess:
+            # If session is still active, don't show "Excused" yet - let the student mark attendance if they are present
+            if sess['is_active']:
+                return None
+                
             sess_date = sess['date']
             cursor.execute('''
                 SELECT 1 FROM leave_requests 
@@ -1062,17 +1066,17 @@ def get_student_subject_summary(student_id):
     Return per-subject attendance summary for a single student.
 
     Returns a dict with:
-      - subjects: list of {subject, sessions_total, attended, percentage}
-      - overall:  {sessions_total, attended, percentage}
+      - subjects: list of {subject, sessions_total, attended, absent, percentage}
+      - overall:  {sessions_total, attended, absent, percentage}
     """
     with get_connection() as conn:
         cursor = conn.cursor()
 
-        # All sessions that have ever been created, grouped by subject
+        # All sessions created, grouped by subject
         cursor.execute(
             "SELECT subject, COUNT(*) AS total FROM attendance_sessions GROUP BY subject"
         )
-        subject_totals = {r['subject']: r['total'] for r in cursor.fetchall()}
+        session_categories = [dict(r) for r in cursor.fetchall()]
 
         # Sessions this student attended, grouped by subject
         cursor.execute(
@@ -1083,34 +1087,41 @@ def get_student_subject_summary(student_id):
                GROUP BY s.subject''',
             (student_id,)
         )
-        attended_by_subject = {r['subject']: r['attended'] for r in cursor.fetchall()}
+        attended_rows = [dict(r) for r in cursor.fetchall()]
+        attended_map = {r['subject']: r['attended'] for r in attended_rows}
 
-        subjects = []
+        subjects_summary = []
         total_sessions = 0
         total_attended = 0
 
-        for subject, sessions_total in subject_totals.items():
-            attended = attended_by_subject.get(subject, 0)
-            pct = round((attended / sessions_total * 100), 1) if sessions_total else 0.0
-            subjects.append({
-                'subject':        subject,
-                'sessions_total': sessions_total,
-                'attended':       attended,
-                'absent':         sessions_total - attended,
-                'percentage':     pct,
+        for cat in session_categories:
+            sub_name = cat['subject']
+            total    = cat['total']
+            attended = attended_map.get(sub_name, 0)
+            
+            absent = total - attended
+            pct = round((attended / total * 100), 2) if total > 0 else 0.0
+            
+            subjects_summary.append({
+                'subject':        sub_name,
+                'sessions_total': float(total),
+                'attended':       float(attended),
+                'absent':         float(absent),
+                'percentage':     pct
             })
-            total_sessions += sessions_total
+            
+            total_sessions += total
             total_attended += attended
 
-        overall_pct = round((total_attended / total_sessions * 100), 1) if total_sessions else 0.0
+        overall_pct = round((total_attended / total_sessions * 100), 2) if total_sessions > 0 else 0.0
 
         return {
-            'subjects': sorted(subjects, key=lambda x: x['subject']),
+            'subjects': sorted(subjects_summary, key=lambda x: x['subject']),
             'overall': {
-                'sessions_total': total_sessions,
-                'attended':       total_attended,
-                'absent':         total_sessions - total_attended,
-                'percentage':     overall_pct,
+                'sessions_total': float(total_sessions),
+                'attended':       float(total_attended),
+                'absent':         float(total_sessions - total_attended),
+                'percentage':     overall_pct
             }
         }
 

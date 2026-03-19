@@ -1,3 +1,4 @@
+
 """
 OTP Manager Module for Smart Attendance System
 Handles OTP generation, email sending, and validation for fallback authentication.
@@ -14,9 +15,11 @@ import threading
 import time
 
 
+import secrets
+
 def generate_otp(length=6):
     """
-    Generate a random numeric OTP.
+    Generate a cryptographically secure numeric OTP.
     
     Args:
         length: Number of digits (default 6)
@@ -24,8 +27,7 @@ def generate_otp(length=6):
     Returns:
         String OTP
     """
-    otp = ''.join(random.choices(string.digits, k=length))
-    # Removed terminal print for security/privacy as requested
+    otp = ''.join(secrets.choice(string.digits) for _ in range(length))
     return otp
 
 

@@ -67,9 +67,9 @@
             <div class="content-wrapper">
                 <div class="subjects-section" id="leave-requests-section">
                     <h3 style="display:flex; align-items:center; gap:10px;">
-                        <i class="fas fa-calendar-check" style="color:#6366f1;"></i> Leave Approval Requests
-                        {% if leave_requests %}<span class="flash-badge flash-warning"
-                            style="font-size:10px; padding:2px 8px;">{{ leave_requests|length }} pending</span>{% endif
+                        <i class="fas fa-calendar-check" style="color:#6366f1;"></i> All Leave Requests
+                        {% if leave_requests %}<span class="flash-badge flash-info"
+                            style="font-size:10px; padding:2px 8px;">{{ leave_requests|length }} total</span>{% endif
                         %}
                     </h3>
 
@@ -95,7 +95,7 @@
                                         Reason</th>
                                     <th
                                         style="padding:15px; font-size:12px; color:var(--text-muted); text-transform:uppercase;">
-                                        Actions</th>
+                                        Status / Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -118,6 +118,7 @@
                                             lr.other_reason }}"</div>{% endif %}
                                     </td>
                                     <td style="padding:15px;">
+                                        {% if lr.status == 'Pending' %}
                                         <div style="display:flex; gap:8px;">
                                             <form
                                                 action="{{ url_for('teacher_leave_action', req_id=lr.id, action='approve') }}"
@@ -134,6 +135,11 @@
                                                         class="fas fa-times"></i> Reject</button>
                                             </form>
                                         </div>
+                                        {% elif lr.status == 'Approved' %}
+                                        <span style="color:#10b981; font-weight:700; font-size:12px;"><i class="fas fa-check-circle"></i> Approved</span>
+                                        {% elif lr.status == 'Rejected' %}
+                                        <span style="color:#ef4444; font-weight:700; font-size:12px;"><i class="fas fa-times-circle"></i> Rejected</span>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% endfor %}

@@ -26,7 +26,7 @@ from notification_manager import send_low_attendance_alert, send_weekly_digest
 from database import (
     init_db,
     get_or_create_student, get_student, get_student_email, update_student_email, add_student,
-    check_face_exists_in_db,
+    check_face_exists_in_db, get_connection,
     create_session, close_session, get_active_sessions, get_session,
     check_attendance_for_session, mark_attendance,
     get_attendance_records,
@@ -382,7 +382,22 @@ def teacher_approve_verification(attendance_id):
     if "teacher_id" not in session:
         return redirect(url_for("teacher_login"))
     
-    from database import approve_attendance
+    from database import approve_attendance, get_session, get_connection
+    
+    # Security: Verify this attendance record belongs to a session of the logged-in teacher
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT session_id FROM attendance WHERE id = ?", (attendance_id,))
+        att = cursor.fetchone()
+        if not att:
+            flash("Attendance record not found.", "error")
+            return redirect(url_for("teacher_dashboard"))
+        
+        sess = get_session(att['session_id'])
+        if not sess or sess['teacher_id'] != session['teacher_id']:
+            flash("Unauthorized: You can only verify students for your own sessions.", "error")
+            return redirect(url_for("teacher_dashboard"))
+
     if approve_attendance(attendance_id):
         flash("Student verified successfully!", "success")
     else:
@@ -395,7 +410,22 @@ def teacher_reject_verification(attendance_id):
     if "teacher_id" not in session:
         return redirect(url_for("teacher_login"))
     
-    from database import reject_attendance
+    from database import reject_attendance, get_session, get_connection
+    
+    # Security: Verify this attendance record belongs to a session of the logged-in teacher
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT session_id FROM attendance WHERE id = ?", (attendance_id,))
+        att = cursor.fetchone()
+        if not att:
+            flash("Attendance record not found.", "error")
+            return redirect(url_for("teacher_dashboard"))
+        
+        sess = get_session(att['session_id'])
+        if not sess or sess['teacher_id'] != session['teacher_id']:
+            flash("Unauthorized: You can only verify students for your own sessions.", "error")
+            return redirect(url_for("teacher_dashboard"))
+
     if reject_attendance(attendance_id):
         flash("Verification request rejected.", "warning")
     else:
@@ -854,6 +884,7 @@ def student_dashboard():
             "longitude":     s["longitude"],
             "already_marked": att_status is not None,
             "status":        att_status,
+            "otp_verified":  session.get(f"otp_verified_{s['id']}", False),
             "is_active":     s.get("is_active", 1) # Support checking if it's the requested but inactive one
         })
 
@@ -949,11 +980,17 @@ def mark_attendance_route(session_id):
             flash(f"Out of range ({distance:.1f}m). Please go inside to mark attendance.", "error")
             return redirect(url_for("student_dashboard"))
             
-        # STEP 2: Mandatory OTP Verification
+        # STEP 2: Persistent OTP Verification
         qr_token = request.form.get("qr_token")
-        if not verify_otp(session_id, qr_token):
-            flash("OTP verification failed or expired. Please enter the current code from the teacher's screen.", "error")
-            return redirect(url_for("student_dashboard"))
+        otp_verified_in_session = session.get(f"otp_verified_{session_id}")
+        
+        # If not verified in current session, try to verify the token provided
+        if not otp_verified_in_session:
+            if qr_token and verify_otp(session_id, qr_token):
+                session[f"otp_verified_{session_id}"] = True
+            else:
+                flash("OTP verification failed or expired. Please enter the current code from the teacher's screen.", "error")
+                return redirect(url_for("student_dashboard", request_verification=session_id))
 
         # STEP 3: Face Recognition Flow
         from face_manager import capture_face, train_recognizer, recognize_face
@@ -1040,11 +1077,14 @@ def student_request_verification(session_id):
         flash("Invalid location data.", "error")
         return redirect(url_for("student_dashboard"))
 
-    # 2. OTP Verification
+    # 2. OTP Verification (Check session first)
     otp = request.form.get("otp")
-    if not verify_otp(session_id, otp):
-        flash("Invalid or expired OTP. Manual verification requires the current code.", "error")
-        return redirect(url_for("student_dashboard"))
+    if not session.get(f"otp_verified_{session_id}"):
+        if otp and verify_otp(session_id, otp):
+             session[f"otp_verified_{session_id}"] = True
+        else:
+            flash("Invalid or expired OTP. Manual verification requires the current code.", "error")
+            return redirect(url_for("student_dashboard", request_verification=session_id))
 
     # 3. Create pending record
     if mark_attendance(student_id, session_id, auth_method="Manual", 
@@ -1169,14 +1209,15 @@ def mark_attendance_qr():
 
 @app.route("/student/verify-otp-only", methods=["POST"])
 def verify_otp_only():
-    """Standalone OTP verification for the 'Step 1' UI feedback."""
+    """Standalone OTP verification for the 'Step 1' UI feedback. Sets persistent session flag."""
     if "student_id" not in session:
         return jsonify({"success": False, "message": "Login required"}), 401
     
-    session_id = request.form.get("session_id")
+    session_id = request.form.get("session_id", type=int)
     token = request.form.get("token")
     
     if verify_otp(session_id, token):
+        session[f"otp_verified_{session_id}"] = True
         return jsonify({"success": True, "message": "OTP Verified! Move to Proximity Check."})
     else:
         return jsonify({"success": False, "message": "Invalid or expired OTP. Try again."})
@@ -1201,7 +1242,7 @@ def teacher_manage_leaves():
     teacher_id = session["teacher_id"]
     teacher = get_teacher(teacher_id) or DEFAULT_TEACHER
     from database import get_leave_requests
-    leave_requests = get_leave_requests(status="Pending")
+    leave_requests = get_leave_requests()
     return render_template("teacher_leaves.html", teacher=teacher, leave_requests=leave_requests)
 
 @app.route("/student/apply-leave", methods=["POST"])
@@ -1220,6 +1261,10 @@ def apply_leave():
     if not from_date or not to_date or not reason:
         flash("Please provide all required leave details.", "warning")
         return redirect(url_for("student_dashboard"))
+        
+    if from_date > to_date:
+        flash("Invalid date range: 'From Date' must be before or equal to 'To Date'.", "error")
+        return redirect(url_for("student_leaves"))
         
     if create_leave_request(student_id, from_date, to_date, reason, other):
         flash("Leave request submitted successfully! Pending approval from Dr. Sridevi.", "success")
@@ -1248,4 +1293,4 @@ def teacher_leave_action(req_id, action):
 # ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

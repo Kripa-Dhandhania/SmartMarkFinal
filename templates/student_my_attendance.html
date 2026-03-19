@@ -378,196 +378,130 @@
 
             <div class="sd-content-area">
 
-                <!-- ── OVERALL HERO CARD ── -->
-                {% if overall.sessions_total > 0 %}
-                <div class="overall-card">
-                    <div class="overall-chart-wrap">
-                        <canvas id="overallDonut"></canvas>
-                        <div class="overall-pct-label">
-                            {{ overall.percentage }}%
-                            <small>Overall</small>
-                        </div>
-                    </div>
-                    <div class="overall-details">
-                        <h2>Overall Attendance</h2>
-                        <p>Across all {{ subjects|length }} subject{{ 's' if subjects|length != 1 else '' }}</p>
-                        <div class="overall-stats-row">
-                            <div class="overall-stat-item">
-                                <span class="num">{{ overall.attended }}</span>
-                                <span class="lbl">Attended</span>
-                            </div>
-                            <div class="overall-stat-item">
-                                <span class="num">{{ overall.absent }}</span>
-                                <span class="lbl">Absent</span>
-                            </div>
-                            <div class="overall-stat-item">
-                                <span class="num">{{ overall.sessions_total }}</span>
-                                <span class="lbl">Total Classes</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% endif %}
+                <!-- ── NEW ATTENDANCE SUMMARY TABLE ── -->
+                <style>
+                    .attendance-card {
+                        background: #fff;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+                        overflow: hidden;
+                        border: 1px solid #e2e8f0;
+                        margin-bottom: 30px;
+                    }
+                    .attendance-header {
+                        background: linear-gradient(to bottom, #7fb9d8 0%, #3b82eb 100%);
+                        padding: 10px 18px;
+                        color: #1e3a8a;
+                        font-weight: 700;
+                        font-size: 15px;
+                        border-bottom: 2px solid #2563eb;
+                    }
+                    .summary-table-wrap {
+                        padding: 15px;
+                        background: #f8fafc;
+                    }
+                    .summary-table {
+                        width: 100%;
+                        border-collapse: collapse;
+                        background: #fff;
+                        border: 1px solid #cbd5e1;
+                        font-size: 13px;
+                    }
+                    .summary-table th {
+                        background: #eff6ff;
+                        color: #1e40af;
+                        font-weight: 700;
+                        text-align: left;
+                        padding: 10px 12px;
+                        border: 1px solid #cbd5e1;
+                        text-transform: none;
+                        font-size: 13px;
+                    }
+                    .summary-table td {
+                        padding: 10px 12px;
+                        border: 1px solid #cbd5e1;
+                        color: #334155;
+                        vertical-align: middle;
+                    }
+                    .summary-table tr:nth-child(even) {
+                        background-color: #f1f5f9;
+                    }
+                    .summary-table tr:hover {
+                        background-color: #e2e8f0;
+                    }
+                    .summary-table .text-center { text-align: center; }
+                    .summary-table .text-right { text-align: right; }
+                    .summary-table .font-bold { font-weight: 700; }
+                    .summary-table .text-blue { color: #2563eb; }
+                    
+                    .total-row {
+                        background: #fff !important;
+                        font-weight: 800;
+                    }
+                    .total-row td {
+                        border-top: 2px solid #3b82f6;
+                    }
+                    .percentage-cell {
+                        color: #1e293b;
+                        font-weight: 700;
+                    }
+                </style>
 
-                <!-- ── TOP STAT STRIP ── -->
-                <div class="att-summary-grid">
-                    <div class="summary-stat">
-                        <div class="summary-stat-icon blue"><i class="fas fa-book-open"></i></div>
-                        <div>
-                            <div class="summary-stat-val">{{ subjects|length }}</div>
-                            <div class="summary-stat-lbl">Subjects</div>
-                        </div>
-                    </div>
-                    <div class="summary-stat">
-                        <div class="summary-stat-icon green"><i class="fas fa-check-circle"></i></div>
-                        <div>
-                            <div class="summary-stat-val">{{ overall.attended }}</div>
-                            <div class="summary-stat-lbl">Classes Attended</div>
-                        </div>
-                    </div>
-                    <div class="summary-stat">
-                        <div class="summary-stat-icon red"><i class="fas fa-times-circle"></i></div>
-                        <div>
-                            <div class="summary-stat-val">{{ overall.absent }}</div>
-                            <div class="summary-stat-lbl">Classes Missed</div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- ── PER-SUBJECT CARDS ── -->
-                {% if subjects %}
-                <div class="sd-section-title">Attendance by Subject</div>
-
-                <div class="threshold-note">
-                    <span><span class="legend-dot" style="background:#22c55e;"></span> ≥ 75% — Safe</span>
-                    <span><span class="legend-dot" style="background:#f59e0b;"></span> 50–74% — At Risk</span>
-                    <span><span class="legend-dot" style="background:#ef4444;"></span> &lt; 50% — Critical</span>
-                    <span style="margin-left:auto;font-style:italic;">Minimum required: 75%</span>
-                </div>
-
-                <div class="subject-att-grid">
-                    {% for sub in subjects %}
-                    {% set cls = 'good' if sub.percentage >= 75 else ('warning' if sub.percentage >= 50 else 'danger')
-                    %}
-                    <div class="subject-att-card {{ cls }}">
-                        <div class="subject-name">
-                            <i class="fas fa-book"></i> {{ sub.subject }}
-                        </div>
-                        <div class="subject-progress-bar">
-                            <div class="subject-progress-fill fill-{{ cls }}"
-                                style="width: {{ [sub.percentage, 0]|max }}%;"></div>
-                        </div>
-                        <div class="subject-stats-row">
-                            <div class="subject-meta">
-                                <span>{{ sub.attended }}</span> / {{ sub.sessions_total }} classes
-                                &nbsp;·&nbsp;
-                                <span>{{ sub.absent }}</span> absent
-                            </div>
-                            <div class="pct-pill {{ cls }}">{{ sub.percentage }}%</div>
-                        </div>
-                    </div>
-                    {% endfor %}
-                </div>
-
-                {% else %}
-                <div class="sd-card" style="text-align:center;padding:60px 20px;">
-                    <i class="fas fa-chart-bar" style="font-size:36px;color:#bfdbfe;"></i>
-                    <p style="margin-top:16px;font-size:15px;font-weight:600;color:#374151;">No attendance data yet</p>
-                    <p style="font-size:13px;color:#9ca3af;margin-top:6px;">Mark attendance from the Dashboard to see
-                        your stats here.</p>
-                    <a href="{{ url_for('student_dashboard') }}"
-                        style="display:inline-block;margin-top:20px;padding:10px 22px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border-radius:10px;text-decoration:none;font-size:13px;font-weight:600;">
-                        <i class="fas fa-arrow-left"></i> Back to Dashboard
-                    </a>
-                </div>
-                {% endif %}
-
-                <!-- ── FULL HISTORY TABLE ── -->
-                {% if all_records %}
-                <div class="history-section">
-                    <div class="sd-section-title" style="margin-top:10px;">Full Attendance History</div>
-                    <div class="sd-card" style="padding:0;overflow:hidden;">
-                        <table class="my-att-table">
+                <div class="attendance-card">
+                    <div class="attendance-header">Attendance</div>
+                    <div class="summary-table-wrap">
+                        <table class="summary-table">
                             <thead>
                                 <tr>
-                                    <th>#</th>
-                                    <th>Subject</th>
-                                    <th>Hour</th>
-                                    <th>Date</th>
-                                    <th>Time</th>
-                                    <th>Method</th>
-                                    <th>Status</th>
+                                    <th style="width: 60px;" class="text-center">Sl.No</th>
+                                    <th>Subject Name</th>
+                                    <th class="text-center">Conducted</th>
+                                    <th class="text-center">Present</th>
+                                    <th class="text-center">TotalHours absent</th>
+                                    <th class="text-center">Percentage</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for r in all_records %}
-                                <tr>
-                                    <td style="color:#9ca3af;font-size:11px;">{{ loop.index }}</td>
-                                    <td style="font-weight:600;">{{ r.subject or '—' }}</td>
-                                    <td>Hour {{ r.hour or '—' }}</td>
-                                    <td>{{ r.date }}</td>
-                                    <td style="color:#6b7280;font-size:12px;">{{ r.marked_at[:16] if r.marked_at else
-                                        '—' }}</td>
-                                    <td>
-                                        {% if r.auth_method == 'Face' %}
-                                        <span class="badge-face"><i class="fas fa-camera"></i> Face</span>
-                                        {% elif r.auth_method == 'Location' %}
-                                        <span class="badge-location"
-                                            style="background:#e0f2fe; color:#0369a1; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700;"><i
-                                                class="fas fa-map-marker-alt"></i> Location</span>
-                                        {% elif r.auth_method == 'Manual' %}
-                                        <span class="badge-manual"
-                                            style="background:#fffbeb; color:#92400e; border:1px solid #fcd34d; padding:2px 10px; border-radius:12px; font-size:11px; font-weight:700;"><i
-                                                class="fas fa-user-shield"></i> Manual</span>
-                                        {% else %}
-                                        <span class="badge-otp"
-                                            style="background:#fff7ed; border:1px solid #fed7aa; color:#c2410c; padding:2px 10px; border-radius:20px; font-size:11px; font-weight:700;"><i
-                                                class="fas fa-key"></i> OTP</span>
-                                        {% endif %}
-                                    </td>
-                                    <td>
-                                        <span
-                                            style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;">
-                                            {{ r.status }}
-                                        </span>
-                                    </td>
-                                </tr>
-                                {% endfor %}
+                                {% if subjects %}
+                                    {% for sub in subjects %}
+                                    <tr>
+                                        <td class="text-center">{{ loop.index }}</td>
+                                        <td class="font-bold text-blue" style="text-transform: uppercase;">{{ sub.subject }}</td>
+                                        <td class="text-center">{{ sub.sessions_total }}</td>
+                                        <td class="text-center">{{ sub.attended }}</td>
+                                        <td class="text-center" style="color: #1e40af;">{{ sub.absent }}</td>
+                                        <td class="text-center font-bold">{{ sub.percentage }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                    
+                                    <!-- Footer Totals -->
+                                    <tr class="total-row">
+                                        <td colspan="2" class="text-right font-bold">Total</td>
+                                        <td class="text-center">{{ overall.sessions_total }}</td>
+                                        <td class="text-center">{{ overall.attended }}</td>
+                                        <td class="text-center" style="color: #1e40af;">{{ overall.absent }}</td>
+                                        <td class="bg-blue-50"></td>
+                                    </tr>
+                                    <tr class="total-row">
+                                        <td colspan="5" class="text-right font-bold">Total Percentage</td>
+                                        <td class="text-center font-bold" style="color: #1e293b; border-top: 2px solid #3b82f6;">{{ overall.percentage }}</td>
+                                    </tr>
+                                {% else %}
+                                    <tr>
+                                        <td colspan="6" class="text-center" style="padding: 40px; color: #64748b;">
+                                            <i class="fas fa-info-circle"></i> No attendance records found.
+                                        </td>
+                                    </tr>
+                                {% endif %}
                             </tbody>
                         </table>
                     </div>
                 </div>
-                {% endif %}
 
             </div><!-- end sd-content-area -->
         </div><!-- end sd-main -->
     </div><!-- end sd-wrapper -->
 
     <script src="{{ url_for('static', filename='js/theme-toggle.js') }}"></script>
-    <script>
-        // Overall Donut Chart
-        {% if overall.sessions_total > 0 %}
-        var attended = Number("{{ overall.attended or 0 }}");
-        var absent = Number("{{ overall.absent or 0 }}");
-
-        new Chart(document.getElementById('overallDonut'), {
-            type: 'doughnut',
-            data: {
-                labels: ['Attended', 'Absent'],
-                datasets: [{
-                    data: [attended, absent],
-                    backgroundColor: ['#4ade80', 'rgba(255,255,255,0.2)'],
-                    borderWidth: 0,
-                    hoverOffset: 4
-                }]
-            },
-            options: {
-                cutout: '75%',
-                plugins: { legend: { display: false }, tooltip: { enabled: false } },
-            }
-        });
-        {% endif %}
-    </script>
 </body>
-
 </html>

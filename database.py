@@ -219,6 +219,7 @@ def init_db():
             ("T1003", "Dr. Neha Singhal", "n@christuniversity.in", "Department of Computer Science"),
             ("T1004", "Dr. Tejil John", "t@christuniversity.in", "Department of Computer Science"),
             ("T1005", "Dr. Binayak Dutta", "b@christuniversity.in", "Department of Computer Science"),
+            ("T1006", "Dr. Deepa V Jose", "d@christuniversity.in", "Department of Computer Science"),
         ]
         
         for tid, tname, temail, tdept in teachers_to_seed:
@@ -242,6 +243,7 @@ def init_db():
             ("T1003", "Data Communications and Networks", "MCA - Sem 3"),
             ("T1004", "Cognitive Psychology", "MCA - Sem 3"),
             ("T1005", "Go Programming", "MCA - Sem 3"),
+            ("T1006", "Operating System", "MCA - Sem 3"),
         ]
 
         for tid, sname, cinfo in subjects_to_seed:

@@ -22,21 +22,21 @@
                 <span class="sd-sidebar-brand">SmartMark</span>
             </div>
             <nav class="sd-nav">
-                <a href="{{ url_for('student_dashboard') }}" class="sd-nav-item active">
+                <a href="{{ url_for('student_dashboard', student_id=student_id) }}" class="sd-nav-item active">
                     <i class="fas fa-home"></i><span>Dashboard</span>
                 </a>
-                <a href="{{ url_for('student_my_attendance') }}" class="sd-nav-item">
+                <a href="{{ url_for('student_my_attendance', student_id=student_id) }}" class="sd-nav-item">
                     <i class="fas fa-history"></i><span>My Attendance</span>
                 </a>
                 <a href="{{ url_for('teacher_dashboard') }}" class="sd-nav-item">
                     <i class="fas fa-chalkboard-teacher"></i><span>Teacher Portal</span>
                 </a>
-                <a href="{{ url_for('student_leaves') }}" class="sd-nav-item">
+                <a href="{{ url_for('student_leaves', student_id=student_id) }}" class="sd-nav-item">
                     <i class="fas fa-calendar-plus"></i><span>Apply Leave</span>
                 </a>
             </nav>
             <div class="sd-nav-footer">
-                <a href="{{ url_for('student_logout') }}" class="sd-logout-link">
+                <a href="{{ url_for('student_logout', student_id=student_id) }}" class="sd-logout-link">
                     <i class="fas fa-sign-out-alt"></i><span>Logout</span>
                 </a>
             </div>
@@ -166,7 +166,7 @@
                                     {% else %}
                                     <div style="display:flex; flex-direction:column; gap:6px;">
                                         <form method="POST"
-                                            action="{{ url_for('mark_attendance_route', session_id=s.id) }}"
+                                            action="{{ url_for('mark_attendance_route', student_id=student_id, session_id=s.id) }}"
                                             style="margin:0;" class="attendance-form"
                                             data-otp-verified="{{ 'true' if s.otp_verified else 'false' }}">
                                             <input type="hidden" name="latitude" class="lat-input">
@@ -220,7 +220,7 @@
                                         <div class="manual-fallback-area {{ 'hidden' if not s.otp_verified }}" 
                                              style="margin-top:5px; display: {{ 'block' if s.otp_verified else 'none' }};">
                                             <form method="POST"
-                                                action="{{ url_for('student_request_verification', session_id=s.id) }}"
+                                                action="{{ url_for('student_request_verification', student_id=student_id, session_id=s.id) }}"
                                                 style="margin:0;">
                                                 <input type="hidden" name="latitude" class="lat-input">
                                                 <input type="hidden" name="longitude" class="lon-input">
@@ -564,7 +564,7 @@
                     fd.append('token', otp);
 
                     try {
-                        const res = await fetch('/student/verify-otp-only', { method: 'POST', body: fd });
+                        const res = await fetch("{{ url_for('verify_otp_only', student_id=student_id) }}", { method: 'POST', body: fd });
                         const data = await res.json();
 
                         if (data.success) {
@@ -672,7 +672,7 @@
                 if (currentFaceMode === 'enroll') {
                     const fd = new FormData();
                     fd.append('face_image', dataURL);
-                    fetch("{{ url_for('enroll_face') }}", { method: 'POST', body: fd })
+                    fetch("{{ url_for('enroll_face', student_id=student_id) }}", { method: 'POST', body: fd })
                         .then(r => r.redirected ? window.location.href = r.url : r.json())
                         .then(data => {
                             if (data && !data.success) {

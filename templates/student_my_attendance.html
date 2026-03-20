@@ -338,10 +338,10 @@
                 <span class="sd-sidebar-brand">SmartMark</span>
             </div>
             <nav class="sd-nav">
-                <a href="{{ url_for('student_dashboard') }}" class="sd-nav-item">
+                <a href="{{ url_for('student_dashboard', student_id=student_id) }}" class="sd-nav-item">
                     <i class="fas fa-home"></i><span>Dashboard</span>
                 </a>
-                <a href="{{ url_for('student_my_attendance') }}" class="sd-nav-item active">
+                <a href="{{ url_for('student_my_attendance', student_id=student_id) }}" class="sd-nav-item active">
                     <i class="fas fa-history"></i><span>My Attendance</span>
                 </a>
                 <a href="{{ url_for('teacher_dashboard') }}" class="sd-nav-item">
@@ -349,7 +349,7 @@
                 </a>
             </nav>
             <div class="sd-nav-footer">
-                <a href="{{ url_for('student_logout') }}" class="sd-logout-link">
+                <a href="{{ url_for('student_logout', student_id=student_id) }}" class="sd-logout-link">
                     <i class="fas fa-sign-out-alt"></i><span>Logout</span>
                 </a>
             </div>

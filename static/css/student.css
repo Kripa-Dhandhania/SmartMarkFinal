@@ -3,31 +3,35 @@
    ========================================================= */
 
 :root {
-    /* Light Theme (Default) */
-    --auth-bg: #f0f2f5;
-    --auth-card-bg: #ffffff;
-    --auth-text-primary: #111827;
-    --auth-text-secondary: #4b5563;
-    --auth-text-muted: #9ca3af;
-    --auth-border: #e5e7eb;
-    --auth-input-bg: #f9fafb;
-    --auth-shadow: 0 4px 24px rgba(0, 0, 0, 0.09);
-    --auth-sidebar-grad: linear-gradient(160deg, #1e3a8a 0%, #2563eb 100%);
-    --auth-accent: #2563eb;
+    /* Light Theme (Premium) */
+    --auth-bg: #f8fafc;
+    --auth-card-bg: rgba(255, 255, 255, 0.8);
+    --auth-text-primary: #0f172a;
+    --auth-text-secondary: #475569;
+    --auth-text-muted: #94a3b8;
+    --auth-border: rgba(226, 232, 240, 0.8);
+    --auth-input-bg: #ffffff;
+    --auth-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    --auth-sidebar-grad: linear-gradient(135deg, #4338ca 0%, #2563eb 100%);
+    --auth-accent: #3b82f6;
+    --auth-glass-bg: rgba(255, 255, 255, 0.7);
+    --auth-glass-border: rgba(255, 255, 255, 0.4);
 }
 
 [data-theme='dark'] {
-    /* Dark Theme */
-    --auth-bg: #0f172a;
-    --auth-card-bg: #1e293b;
+    /* Dark Theme (Premium) */
+    --auth-bg: #020617;
+    --auth-card-bg: rgba(30, 41, 59, 0.7);
     --auth-text-primary: #f8fafc;
     --auth-text-secondary: #cbd5e1;
-    --auth-text-muted: #94a3b8;
-    --auth-border: #334155;
+    --auth-text-muted: #64748b;
+    --auth-border: rgba(51, 65, 85, 0.8);
     --auth-input-bg: #0f172a;
-    --auth-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    --auth-sidebar-grad: linear-gradient(160deg, #0f172a 0%, #1e3a8a 100%);
-    --auth-accent: #3b82f6;
+    --auth-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    --auth-sidebar-grad: linear-gradient(135deg, #1e1b4b 0%, #1e3a8a 100%);
+    --auth-accent: #60a5fa;
+    --auth-glass-bg: rgba(30, 41, 59, 0.6);
+    --auth-glass-border: rgba(255, 255, 255, 0.1);
 }
 
 * {
@@ -167,14 +171,16 @@ body.login-page {
 }
 
 .login-card {
-    background: var(--auth-card-bg);
-    border-radius: 16px;
-    padding: 40px 36px;
+    background: var(--auth-glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 24px;
+    padding: 48px 40px;
     width: 100%;
-    max-width: 420px;
+    max-width: 440px;
     box-shadow: var(--auth-shadow);
-    border: 1px solid var(--auth-border);
-    animation: fadeUp 0.4s ease-out;
+    border: 1px solid var(--auth-glass-border);
+    animation: fadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes fadeUp {
@@ -198,12 +204,17 @@ body.login-page {
 .login-logo-row {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    background: #f0f4ff;
-    border: 1px solid #dbeafe;
+    gap: 10px;
+    background: rgba(37, 99, 235, 0.08);
+    border: 1px solid rgba(37, 99, 235, 0.15);
     border-radius: 100px;
-    padding: 6px 16px 6px 8px;
-    margin-bottom: 20px;
+    padding: 8px 20px 8px 12px;
+    margin-bottom: 24px;
+    transition: transform 0.3s ease;
+}
+
+.login-logo-row:hover {
+    transform: scale(1.02);
 }
 
 .login-logo-img {
@@ -289,22 +300,22 @@ body.login-page {
 
 /* ── Login Button ── */
 .btn-login {
-    margin-top: 4px;
-    padding: 13px;
-    background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    margin-top: 8px;
+    padding: 14px;
+    background: var(--auth-sidebar-grad);
     color: #fff;
     border: none;
-    border-radius: 10px;
-    font-size: 14px;
+    border-radius: 12px;
+    font-size: 15px;
     font-weight: 600;
     font-family: 'Inter', sans-serif;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    transition: 0.25s;
-    box-shadow: 0 3px 12px rgba(37, 99, 235, 0.3);
+    gap: 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3);
 }
 
 .btn-login:hover {
